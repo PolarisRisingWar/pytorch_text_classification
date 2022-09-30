@@ -75,6 +75,9 @@ sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from pycls.embedding_utils import load_w2v_matrix,pad_list
 
+#导入数据
+
+
 #文本表征部分
 if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
     if arg_dict['word_segmentation']=='jieba':
@@ -82,7 +85,7 @@ if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返
         word_segmentation_function=jieba.lcut
 
 
-if arg_dict['embedding_method']=='w2v_mean':  #word2vec系
+if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
     embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])
     feature_dim=embedding_weight.shape[1]
 
@@ -105,7 +108,7 @@ if arg_dict['embedding_method']=='w2v_mean':  #word2vec系
 
         return (numerical_text,mask)
 
-
+if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
     #训练集
     train_data=[json.loads(x) for x in open(arg_dict['dataset_folder']+'/train.json').readlines()]
     train_text=[x['sentence'] for x in train_data]
