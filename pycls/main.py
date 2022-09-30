@@ -74,9 +74,10 @@ from torch.utils.data import TensorDataset,DataLoader
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
 from pycls.embedding_utils import load_w2v_matrix,pad_list
+from pycls.dataset_utils import load_datasets
 
 #导入数据
-
+dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
 
 #文本表征部分
 if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
@@ -86,7 +87,7 @@ if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返
 
 
 if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
-    embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])
+    embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])  #矩阵和词-索引对照字典
     feature_dim=embedding_weight.shape[1]
 
     embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
@@ -109,32 +110,17 @@ if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
         return (numerical_text,mask)
 
 if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
-    #训练集
-    train_data=[json.loads(x) for x in open(arg_dict['dataset_folder']+'/train.json').readlines()]
-    train_text=[x['sentence'] for x in train_data]
-    train_dataloader=DataLoader(train_text,arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
-    train_embedding=torch.zeros((len(train_text)),feature_dim)
-    matrix_count=-1
-    for batch in tqdm(train_dataloader):
-        matrix_count+=1
-        outputs=embedding(batch[0].to(arg_dict['cuda_device']))
-        outputs=outputs.sum(axis=1)/batch[1].to(arg_dict['cuda_device']).sum(axis=1).unsqueeze(1)  #我显式把mask部分的嵌入置0了
-        train_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
-
-    #验证集
-    dev_data=[json.loads(x) for x in open(arg_dict['dataset_folder']+'/dev.json').readlines()]
-    dev_text=[x['sentence'] for x in dev_data]
-    dev_dataloader=DataLoader(dev_text,arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
-    dev_embedding=torch.zeros((len(dev_text)),feature_dim)
-    matrix_count=-1
-    for batch in tqdm(dev_dataloader):
-        matrix_count+=1
-        outputs=embedding(batch[0].to(arg_dict['cuda_device']))
-        outputs=outputs.sum(axis=1)/batch[1].to(arg_dict['cuda_device']).sum(axis=1).unsqueeze(1)  #我显式把mask部分的嵌入置0了
-        dev_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
-
-print(train_embedding.size())
-print(dev_embedding.size())
+    for k in dataset_dict:
+        dataloader=DataLoader(dataset_dict[k]['text'],arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
+        temp_embedding=torch.zeros((len(dataset_dict[k]['text'])),feature_dim)
+        matrix_count=-1
+        for batch in tqdm(dataloader):
+            matrix_count+=1
+            outputs=embedding(batch[0].to(arg_dict['cuda_device']))
+            outputs=outputs.sum(axis=1)/batch[1].to(arg_dict['cuda_device']).sum(axis=1).unsqueeze(1)  #我显式把mask部分的嵌入置0了
+            temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
+        dataset_dict[k]['embedding']=temp_embedding
+        print('完成数据集'+k+'嵌入，其维度为：'+str(temp_embedding.size()))
 
 #建立线性分类器
 class LinearClassifier(nn.Module):
@@ -157,8 +143,8 @@ optimizer=torch.optim.Adam(params=model.parameters(),lr=1e-4)
 loss_func=nn.CrossEntropyLoss()
 
 #训练集
-train_labels=torch.tensor([int(json.loads(x)['label']) for x in open(arg_dict['dataset_folder']+'/train.json').readlines()])
-train_dataloader=DataLoader(TensorDataset(train_embedding,train_labels),batch_size=arg_dict['train_batch_size'],shuffle=True)
+train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
+                            batch_size=arg_dict['train_batch_size'],shuffle=True)
 for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
     for batch in train_dataloader:
         model.train()
@@ -169,9 +155,9 @@ for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
         optimizer.step()
 
 #验证集
-dev_label=[int(json.loads(x)['label']) for x in open(arg_dict['dataset_folder']+'/dev.json').readlines()]
+dev_label=dataset_dict['valid']['label']
 dev_predicts=[]
-dev_dataloader=DataLoader(dev_embedding,batch_size=arg_dict['inference_batch_size'],shuffle=False)
+dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
 with torch.no_grad():
     for batch in dev_dataloader:
         model.eval()
