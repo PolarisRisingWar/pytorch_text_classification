@@ -53,7 +53,7 @@ print(arg_dict)
 
 
 ###代码运行部分
-import json,jieba
+import json,jieba,os,sys
 from tqdm import tqdm
 from datetime import datetime
 
@@ -65,34 +65,13 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset,DataLoader
 
+sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+
+from pycls.embedding_utils import load_w2v_matrix
+
 #文本表征部分
-
-#将词嵌入加载到内存中
-embedding_file=arg_dict['embedding_model_path']
-
-embedding_list=[]
-embedding_list.append([0 for _ in range(300)])  #这个是pad的向量
-with open(embedding_file) as f:
-    f_content=f.readlines()
-#第一行是嵌入的总词数和维度
-#从第二行开始，第一个空格之前的是词，后面的是向量（用空格隔开）
-
-pair=f_content[0].split(' ')
-feature_dim=int(pair[1])
-
-f_content2=f_content[1:]
-first_space_index_list=[sentence.find(' ') for sentence in f_content2]
-word2id={f_content2[idx][:first_space_index_list[idx]]:idx for idx in range(len(f_content2))}
-embedding_list.extend([[float(x) for x in f_content2[idx][first_space_index_list[idx]:].split()] for idx in range(len(f_content2))])
-
-#由于词向量中没有引入UNK，因此参考https://github.com/Embedding/Chinese-Word-Vectors/issues/74 用所有嵌入的平均值作为这一项值
-word2id['UNK']=len(f_content)  #0是pad的索引，所以已经有全的len(f_content)个词向量在了
-
-embedding_weight=np.array(embedding_list)
-unk_embedding=np.mean(embedding_weight,axis=0)
-embedding_weight=np.concatenate((embedding_weight,np.expand_dims(unk_embedding,0)),axis=0)
-
-print(embedding_weight.shape)
+embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])
+feature_dim=embedding_weight.shape[1]
 
 embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
 embedding.weight.data.copy_(torch.from_numpy(embedding_weight))

@@ -1,0 +1,1 @@
+from pycls.embedding_utils.w2v import load_w2v_matrix
