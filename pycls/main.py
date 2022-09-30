@@ -28,10 +28,13 @@ parser.add_argument("--cuda_device",default='cuda:0')
 
 parser.add_argument("--epoch_num",default=10,type=int)
 
+parser.add_argument("--metric",default="acc",nargs="+")
+
 parser.add_argument('--wandb',action='store_true',help='是否开启wandb记录功能')
 
 args = parser.parse_args()
 arg_dict=args.__dict__
+
 assert arg_dict['layer_num']>0
 assert arg_dict['hidden_dim']>0
 assert arg_dict["embedding_batch_size"]>0
@@ -39,6 +42,9 @@ assert arg_dict['train_batch_size']>0
 assert arg_dict['inference_batch_size']>0
 assert arg_dict['epoch_num']>0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
+
+if isinstance(arg_dict["metric"],str):
+    arg_dict["metric"]=arg_dict['metric']
 
 print(arg_dict)
 
@@ -67,7 +73,7 @@ from torch.utils.data import TensorDataset,DataLoader
 
 sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 
-from pycls.embedding_utils import load_w2v_matrix
+from pycls.embedding_utils import load_w2v_matrix,pad_list
 
 #文本表征部分
 embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])
@@ -77,21 +83,6 @@ embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
 embedding.weight.data.copy_(torch.from_numpy(embedding_weight))
 embedding.weight.requires_grad=False
 embedding.to(arg_dict['cuda_device'])
-
-
-def pad_list(v:list,max_length:int):
-    """
-    v是一个由未经pad的数值向量组成的列表
-    返回值是pad后的向量和mask
-    """
-    if len(v)>=max_length:
-        return (v[:max_length],[1 for _ in range(max_length)])
-    else:
-        padded_length=max_length-len(v)
-        m=[1 for _ in range(len(v))]+[0 for _ in range(padded_length)]
-        v.extend([0 for _ in range(padded_length)])
-        return (v,m)
-
 
 def collate_fn(batch):
     jiebaed_text=[jieba.lcut(sentence) for sentence in batch]  #每个元素是一个句子的列表，由句子中的词语组成

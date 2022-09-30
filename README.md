@@ -46,17 +46,21 @@
 通过`-p`参数传入。
 
 第一个字符：
-- `3`：数据集有训练集、验证集和测试集
+- `3`：训练集、验证集和测试集
+- `2`：训练集+测试集
 
 第2-3个字符：
-- `es`：使用早停策略
+- `es`：使用早停策略（只能应用于训练集+验证集+测试集模式）
     `--epoch_num`：最大epoch数
     `--patience`
-    `--es_metric`：早停所使用的指标名
+    `--es_metric`：早停所使用的指标名，可连传多个（跟第5节的指标名相同）
 - `ep`：固定模型运行总epoch数
+    `--epoch_num`：固定epoch数
 
-使用早停策略时需要
 
 # 5. 实验结果和日志
 指标名通过`--metric`传入，可连传多个：
-- `accuracy`：准确率
+- `acc`：准确率
+- `macro-p`：macro-precision
+- `macro-r`：macro-recall
+- `macro-f1`：macro-F1
