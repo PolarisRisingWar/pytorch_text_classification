@@ -55,6 +55,7 @@ print(arg_dict)
 ###代码运行部分
 import json,jieba
 from tqdm import tqdm
+from datetime import datetime
 
 import numpy as np
 
@@ -68,7 +69,7 @@ from torch.utils.data import TensorDataset,DataLoader
 
 #将词嵌入加载到内存中
 embedding_file=arg_dict['embedding_model_path']
-word2id={}
+
 embedding_list=[]
 embedding_list.append([0 for _ in range(300)])  #这个是pad的向量
 with open(embedding_file) as f:
@@ -79,11 +80,10 @@ with open(embedding_file) as f:
 pair=f_content[0].split(' ')
 feature_dim=int(pair[1])
 
-for sentence_index in tqdm(range(1,len(f_content))):
-    sentence=f_content[sentence_index]
-    first_space_index=sentence.find(' ')
-    word2id[sentence[:first_space_index]]=sentence_index
-    embedding_list.append([float(x) for x in sentence[first_space_index:].split()])
+f_content2=f_content[1:]
+first_space_index_list=[sentence.find(' ') for sentence in f_content2]
+word2id={f_content2[idx][:first_space_index_list[idx]]:idx for idx in range(len(f_content2))}
+embedding_list.extend([[float(x) for x in f_content2[idx][first_space_index_list[idx]:].split()] for idx in range(len(f_content2))])
 
 #由于词向量中没有引入UNK，因此参考https://github.com/Embedding/Chinese-Word-Vectors/issues/74 用所有嵌入的平均值作为这一项值
 word2id['UNK']=len(f_content)  #0是pad的索引，所以已经有全的len(f_content)个词向量在了
