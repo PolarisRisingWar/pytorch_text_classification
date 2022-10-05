@@ -28,7 +28,10 @@ parser.add_argument("--train_batch_size",default=2048,type=int)
 parser.add_argument("--inference_batch_size",default=4096,type=int)
 parser.add_argument("--cuda_device",default='cuda:0')
 
+parser.add_argument('-p','--running_mode',default='es')
 parser.add_argument("--epoch_num",default=10,type=int)
+parser.add_argument("--patience",default=5,type=int)
+parser.add_argument("--es_metric",default="acc",nargs="+")
 
 parser.add_argument("--metric",default="acc",nargs="+")
 
@@ -43,6 +46,7 @@ assert arg_dict["embedding_batch_size"]>0
 assert arg_dict['train_batch_size']>0
 assert arg_dict['inference_batch_size']>0
 assert arg_dict['epoch_num']>0
+assert arg_dict['patience']>0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
 
 if isinstance(arg_dict["metric"],str):
@@ -126,6 +130,8 @@ if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词
         dataset_dict[k]['embedding']=temp_embedding
         print('完成数据集'+k+'嵌入，其维度为：'+str(temp_embedding.size()))
 
+#TODO: 感觉上面的内容应该把所有在GPU上的程序先下下来，再继续后面的代码
+
 #建立线性分类器
 class LinearClassifier(nn.Module):
     def __init__(self,input_dim,output_dim=arg_dict['output_dim']):
@@ -149,27 +155,53 @@ loss_func=nn.CrossEntropyLoss()
 #训练集
 train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
                             batch_size=arg_dict['train_batch_size'],shuffle=True)
-for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
-    for batch in train_dataloader:
-        model.train()
-        optimizer.zero_grad()
-        outputs=model(batch[0].to(arg_dict['cuda_device']))
-        train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
-        train_loss.backward()
-        optimizer.step()
 
 #验证集
 dev_label=dataset_dict['valid']['label']
-dev_predicts=[]
 dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+
+if arg_dict['running_mode']=='es':  #应用早停机制
+    accumulated_epoch=0  #早停积累的epoch数
+    max_acc=0
+    for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
+        #训练
+        for batch in train_dataloader:
+            model.train()
+            optimizer.zero_grad()
+            outputs=model(batch[0].to(arg_dict['cuda_device']))
+            train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
+            train_loss.backward()
+            optimizer.step()
+        
+        #验证
+        dev_predicts=[]
+        with torch.no_grad():
+            for batch in dev_dataloader:
+                model.eval()
+                outputs=model(batch.to(arg_dict['cuda_device']))
+                dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
+        if accuracy_score(dev_label,dev_predicts)<max_acc:
+            accumulated_epoch+=1
+            if accumulated_epoch>=arg_dict['patience']:
+                print('达到早停标准，停止程序运行')
+        else:
+            accumulated_epoch=0
+            max_acc=accuracy_score(dev_label,dev_predicts)
+
+        
+#测试
+test_label=dataset_dict['test']['label']
+test_predicts=[]
+test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+
 with torch.no_grad():
-    for batch in dev_dataloader:
+    for batch in test_dataloader:
         model.eval()
         outputs=model(batch.to(arg_dict['cuda_device']))
-        dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
+        test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
 
 #准确率 macro-precison macro-recall macro-F1
-print(accuracy_score(dev_label,dev_predicts))
-print(precision_score(dev_label,dev_predicts,average='macro'))
-print(recall_score(dev_label,dev_predicts,average='macro'))
-print(f1_score(dev_label,dev_predicts,average='macro'))
+print(accuracy_score(test_label,test_predicts))
+print(precision_score(test_label,test_predicts,average='macro'))
+print(recall_score(test_label,test_predicts,average='macro'))
+print(f1_score(test_label,test_predicts,average='macro'))
