@@ -9,7 +9,18 @@
 
 目前可用的处理方式（通过`-dt`参数传入处理方式名称，`-df`传入原始数据集的文件夹路径）：
 - `iflytek`：train.json和dev.json每一行是一个样本，可以用json包加载，sentence的值是文本，label的值是标签索引，label_des的值是标签文本；test.json的sentence值是文本，id值是数值；labels.json每行是一个标签，label的值是索引，label_des的值是文本，标签总数从该文件中获取
+- `ChnSentiCorp_htl_all`：ChnSentiCorp_htl_all.csv是一个用逗号作为分隔符的CSV文件，label字段是标签（0-1），review字段是文本
+
+本项目中，部分数据集原本就自带划分数据集指标。需要通过代码手动划分数据集的情况下，在上述处理方式名称后直接按顺序添加：
+- random包随机种子
+- 数据划分比例（例：`7-2-1`）
+
+（这一部分需要考虑的情况还蛮多的，我以后慢慢补充吧）
+
+理论上倒是也可以自动计算，但是以后再写吧，所以现在需要显式传入的参数：
+`-od`：标签总数
 ## 1.1 中文二分类
+- ChnSentiCorp_htl_all.csv：CSV文件下载源<https://raw.githubusercontent.com/SophonPlus/ChineseNlpCorpus/master/datasets/ChnSentiCorp_htl_all/ChnSentiCorp_htl_all.csv>，处理方式为`ChnSentiCorp_htl_all`
 ## 1.2 中文multi-class单标签分类
 ## 1.3 中文multi-class multi-label分类
 - iflytek_public：压缩文件下载源<https://storage.googleapis.com/cluebenchmark/tasks/iflytek_public.zip>，处理方式为`iflytek`

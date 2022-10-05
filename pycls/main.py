@@ -3,8 +3,10 @@
 import argparse
 parser = argparse.ArgumentParser()
 
-parser.add_argument("-dt","--dataset_type",help='预处理数据集的方法')
+parser.add_argument("-dt","--dataset_type",help='预处理数据集的方法',nargs='+')
 parser.add_argument("-df","--dataset_folder",help='数据集文件夹')
+
+parser.add_argument('-od','--output_dim',help='分类的标签数',type=int)
 
 parser.add_argument("-e","--embedding_method",help='文本嵌入方法')
 
@@ -14,7 +16,7 @@ parser.add_argument("--embedding_batch_size",default=1024,type=int,help="嵌入�
 
 parser.add_argument("-ws","--word_segmentation",default="jieba",help='分词方法')
 
-parser.add_argument("--max_sentence_length",default=512,type=int)
+parser.add_argument("--max_sentence_length",default=512,type=int,help='每一句最长可以输入到模型中的token数')
 
 parser.add_argument("-m","--model",default='mlp',help="文本分类模型名称")
 
@@ -44,7 +46,9 @@ assert arg_dict['epoch_num']>0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
 
 if isinstance(arg_dict["metric"],str):
-    arg_dict["metric"]=arg_dict['metric']
+    arg_dict["metric"]=[arg_dict['metric']]
+if isinstance(arg_dict['dataset_type'],str):
+    arg_dict['dataset_type']=[arg_dict['dataset_type']]
 
 print(arg_dict)
 
@@ -124,7 +128,7 @@ if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词
 
 #建立线性分类器
 class LinearClassifier(nn.Module):
-    def __init__(self,input_dim,output_dim=119):
+    def __init__(self,input_dim,output_dim=arg_dict['output_dim']):
         super(LinearClassifier,self).__init__()
 
         self.dropout=nn.Dropout(arg_dict['dropout'])
