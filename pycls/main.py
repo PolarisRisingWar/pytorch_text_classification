@@ -49,6 +49,8 @@ assert arg_dict['epoch_num']>0
 assert arg_dict['patience']>0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
 
+if isinstance(arg_dict["es_metric"],str):
+    arg_dict["es_metric"]=[arg_dict['es_metric']]
 if isinstance(arg_dict["metric"],str):
     arg_dict["metric"]=[arg_dict['metric']]
 if isinstance(arg_dict['dataset_type'],str):
@@ -88,6 +90,7 @@ from pycls.dataset_utils import load_datasets
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
 
 #文本表征部分
+#TODO: 速度太慢了，下次直接更新储存文本表征的功能吧
 if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
     if arg_dict['word_segmentation']=='jieba':
         import jieba
@@ -152,6 +155,12 @@ model.to(arg_dict['cuda_device'])
 optimizer=torch.optim.Adam(params=model.parameters(),lr=1e-4)
 loss_func=nn.CrossEntropyLoss()
 
+#早停和测试指标
+metric_map={'acc':lambda y_true,y_pred:accuracy_score(y_true,y_pred),
+            'macro-p':lambda y_true,y_pred:precision_score(y_true,y_pred,average='macro'),
+            'macro-r':lambda y_true,y_pred:recall_score(y_true,y_pred,average='macro'),
+            'macro-f1':lambda y_true,y_pred:f1_score(y_true,y_pred,average='macro')}
+
 #训练集
 train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
                             batch_size=arg_dict['train_batch_size'],shuffle=True)
@@ -162,7 +171,13 @@ dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict
 
 if arg_dict['running_mode']=='es':  #应用早停机制
     accumulated_epoch=0  #早停积累的epoch数
-    max_acc=0
+
+    max_metrics=[0 for _ in arg_dict['es_metric']]
+    es_metric_num=len(arg_dict['es_metric'])
+    if 'loss' in arg_dict['es_metric']:  #负向的指标。目前只有loss，如果有别的以后再说
+        loss_index=arg_dict['es_metric'].index('loss')
+        max_metrics[loss_index]=float('inf')
+
     for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
         #训练
         for batch in train_dataloader:
@@ -175,12 +190,21 @@ if arg_dict['running_mode']=='es':  #应用早停机制
         
         #验证
         dev_predicts=[]
+        if 'loss' in arg_dict['es_metric']:
+            dev_loss=0  #TODO：loss这部分我懒得写了，以后补
         with torch.no_grad():
             for batch in dev_dataloader:
                 model.eval()
                 outputs=model(batch.to(arg_dict['cuda_device']))
                 dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
-        if accuracy_score(dev_label,dev_predicts)<max_acc:
+        
+        #早停
+        this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in arg_dict['es_metric']]  #TODO：考虑loss
+        #除loss以外的指标都赋值，loss位置赋0
+        if 'loss' in arg_dict['es_metric']:  #TODO:负向的指标
+            max_metrics[loss_index]=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
+
+        if all([this_epoch_metric[i]<max_metrics[i] for i in range(es_metric_num)]):
             accumulated_epoch+=1
             if accumulated_epoch>=arg_dict['patience']:
                 print('达到早停标准，停止程序运行')
@@ -200,8 +224,6 @@ with torch.no_grad():
         outputs=model(batch.to(arg_dict['cuda_device']))
         test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
 
-#准确率 macro-precison macro-recall macro-F1
-print(accuracy_score(test_label,test_predicts))
-print(precision_score(test_label,test_predicts,average='macro'))
-print(recall_score(test_label,test_predicts,average='macro'))
-print(f1_score(test_label,test_predicts,average='macro'))
+for metric in arg_dict['metric']:
+    print(metric)
+    print(metric_map[metric](test_label,test_predicts))
