@@ -100,7 +100,7 @@ from pycls.dataset_utils import load_datasets
 
 if arg_dict['wandb']:
     import wandb
-    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+str(datetime.now())[:10],config=arg_dict)
+    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+arg_dict['model']+str(datetime.now())[:10],config=arg_dict)
 
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
@@ -164,21 +164,11 @@ if arg_dict['pre_load']=='save':
 
 #TODO: 感觉上面的内容应该把所有在GPU上的程序先下下来，再继续后面的代码
 
-#建立线性分类器
-class LinearClassifier(nn.Module):
-    def __init__(self,input_dim,output_dim=arg_dict['output_dim']):
-        super(LinearClassifier,self).__init__()
+#建立分类器
+if arg_dict['model']=='mlp':
+    from pycls.models import MLP
+    model=MLP(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
 
-        self.dropout=nn.Dropout(arg_dict['dropout'])
-        self.classifier=nn.Linear(input_dim,output_dim)
-    
-    def forward(self,x):
-        x=self.dropout(x)
-        x=self.classifier(x)
-
-        return x
-
-model=LinearClassifier(feature_dim)
 model.to(arg_dict['cuda_device'])
 
 optimizer=torch.optim.Adam(params=model.parameters(),lr=1e-4)
