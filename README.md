@@ -55,10 +55,14 @@
 
 # 4. 代码运行模式
 通过`-p`参数传入。
+（本部分的`xx_metric`参数都和第五节的指标相同，但还可以添加loss（每个step损失函数的总和，不是准确的总loss值）
 - `es`：（默认值）使用早停策略（只能应用于训练集+验证集+测试集都存在的场景）
     `--epoch_num`：最大epoch数
+    `--train_metric`：每个epoch记录的训练集相应指标（会记录在wandb中）
+    `--valid_metric`：每个epoch记录的验证集相应指标（会记录在wandb中）
+    `--checkpoint_metric`：保留checkpoint所使用的指标（在valid_metric中的索引）
     `--patience`
-    `--es_metric`：早停所使用的指标名，可连传多个（跟第5节的指标名相同，此外还可以使用`loss`）（如果使用多个，则意为仅当多个指标都没有提升时，才应用早停机制）
+    `--es_metric`：早停所使用的指标（在valid_metric中的索引），可连传多个（如果使用多个，则意为仅当多个指标都没有变好时，才应用早停机制）
 - `ep`：固定模型运行总epoch数
     `--epoch_num`：固定epoch数
 

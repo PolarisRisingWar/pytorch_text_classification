@@ -31,8 +31,10 @@ parser.add_argument("--cuda_device",default='cuda:0')
 parser.add_argument('-p','--running_mode',default='es')
 parser.add_argument("--epoch_num",default=10,type=int)
 parser.add_argument("--patience",default=5,type=int)
-parser.add_argument("--valid_metric",default="acc")
-parser.add_argument("--es_metric",default="acc",nargs="+")
+parser.add_argument("--train_metric",nargs='*')
+parser.add_argument("--valid_metric",nargs='*')
+parser.add_argument("--checkpoint_metric",default=0,type=int)
+parser.add_argument("--es_metric",default='0',nargs="+")
 
 parser.add_argument("--metric",default="acc",nargs="+")
 
@@ -48,10 +50,16 @@ assert arg_dict['train_batch_size']>0
 assert arg_dict['inference_batch_size']>0
 assert arg_dict['epoch_num']>0
 assert arg_dict['patience']>0
+assert arg_dict['checkpoint_metric']>=0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
 
 if isinstance(arg_dict["es_metric"],str):
     arg_dict["es_metric"]=[arg_dict['es_metric']]
+arg_dict['es_metric']=[int(x) for x in arg_dict['es_metric']]
+if isinstance(arg_dict["train_metric"],str):
+    arg_dict["train_metric"]=[arg_dict['train_metric']]
+if isinstance(arg_dict["valid_metric"],str):
+    arg_dict["valid_metric"]=[arg_dict['valid_metric']]
 if isinstance(arg_dict["metric"],str):
     arg_dict["metric"]=[arg_dict['metric']]
 if isinstance(arg_dict['dataset_type'],str):
@@ -73,7 +81,7 @@ print(arg_dict)
 import json,os,sys
 from tqdm import tqdm
 from datetime import datetime
-from copy import deepcopy
+from copy import copy,deepcopy
 
 import numpy as np
 
@@ -172,55 +180,70 @@ dev_label=dataset_dict['valid']['label']
 dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
 if arg_dict['running_mode']=='es':  #应用早停机制
+    assert len(arg_dict['valid_metric'])>0  #就是说起码需要有验证指标才行
+    assert arg_dict['checkpoint_metric']<len(arg_dict['valid_metric'])
+
+    max_valid_metric=0  #用以衡量最终使用哪个epoch的checkpoint
     best_model={}
     accumulated_epoch=0  #早停积累的epoch数
-    max_valid_metric=0  #TODO：验证的这个可以算在早停的指标里面（如有重复）以减少计算量
 
-    max_metrics=[0 for _ in arg_dict['es_metric']]  #TODO：loss
-    es_metric_num=len(arg_dict['es_metric'])
-    if 'loss' in arg_dict['es_metric']:  #负向的指标。目前只有loss，如果有别的以后再说
-        loss_index=arg_dict['es_metric'].index('loss')
-        max_metrics[loss_index]=float('inf')
+    #训练集指标
+    train_metrics=copy(arg_dict['train_metric'])
+    if 'loss' in arg_dict['train_metric']:
+        train_metrics.remove('loss')
+        train_metric_loss=[]
+    train_metrics_values=[]
+
+    #验证集指标
+    valid_metrics=copy(arg_dict['valid_metric'])
+    if 'loss' in arg_dict['valid_metric']:
+        valid_metrics.remove('loss')
+        max_metrics_loss=float('inf')
+    max_metrics=[0 for _ in valid_metrics]
+    valid_metrics_values=[]
 
     for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
         #训练
+        #TODO:其他train_metric指标
+        if 'loss' in arg_dict['train_metric']:
+            this_epoch_loss=0
         for batch in train_dataloader:
             model.train()
             optimizer.zero_grad()
             outputs=model(batch[0].to(arg_dict['cuda_device']))
             train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
+            if 'loss' in arg_dict['train_metric']:
+                this_epoch_loss+=train_loss.item()
             train_loss.backward()
             optimizer.step()
+        if 'loss' in arg_dict['train_metric']:
+            train_metric_loss.append(this_epoch_loss)
         
         #验证
         dev_predicts=[]
-        if 'loss' in arg_dict['es_metric']:
-            dev_loss=0  #TODO：loss这部分我懒得写了，以后补
+        #TODO：验证集损失函数
         with torch.no_grad():
             for batch in dev_dataloader:
                 model.eval()
                 outputs=model(batch.to(arg_dict['cuda_device']))
                 dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
         
-        valid_metric=metric_map[arg_dict["valid_metric"]](dev_label,dev_predicts)
-        if valid_metric>max_valid_metric:  #更新checkpoint
-            max_valid_metric=valid_metric
+        #记录指标
+        this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
+        valid_metrics_values.append(copy(this_epoch_metric))
+
+        if this_epoch_metric[arg_dict['checkpoint_metric']]>max_valid_metric:  #更新checkpoint
+            max_valid_metric=this_epoch_metric[arg_dict['checkpoint_metric']]
             best_model=deepcopy(model.state_dict())
 
-        
         #早停
-        this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in arg_dict['es_metric']]  #TODO：考虑loss
-        #除loss以外的指标都赋值，loss位置赋0
-        if 'loss' in arg_dict['es_metric']:  #TODO:负向的指标
-            max_metrics[loss_index]=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
-
-        if all([this_epoch_metric[i]<max_metrics[i] for i in range(es_metric_num)]):
+        if all([this_epoch_metric[i]<max_metrics[i] for i in range(len(max_metrics))]):
             accumulated_epoch+=1
             if accumulated_epoch>=arg_dict['patience']:
                 print('达到早停标准，停止程序运行')
         else:
             accumulated_epoch=0
-            max_acc=accuracy_score(dev_label,dev_predicts)
+            max_metrics=[max(max_metrics[i],this_epoch_metric[i]) for i in range(len(max_metrics))]
 
         
 #测试
