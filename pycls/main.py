@@ -9,6 +9,8 @@ parser.add_argument("-df","--dataset_folder",help='数据集文件夹')
 parser.add_argument('-od','--output_dim',help='分类的标签数',type=int)
 
 parser.add_argument("-e","--embedding_method",help='文本嵌入方法')
+parser.add_argument("--pre_load",help="是否使用或储存本地的嵌入矩阵")
+parser.add_argument("--embedding_folder",help="本地嵌入矩阵的存储路径")
 
 parser.add_argument("-ep","--embedding_model_path",help='文本嵌入预训练模型路径')
 parser.add_argument("-et","--embedding_model_type",help='将文本嵌入预训练模型加载到本地的方法')
@@ -96,52 +98,69 @@ sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 from pycls.embedding_utils import load_w2v_matrix,pad_list
 from pycls.dataset_utils import load_datasets
 
+if arg_dict['wandb']:
+    import wandb
+    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+str(datetime.now())[:10],config=arg_dict)
+
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
 
-#文本表征部分
-#TODO: 速度太慢了，下次直接更新储存文本表征的功能吧
-if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
-    if arg_dict['word_segmentation']=='jieba':
-        import jieba
-        word_segmentation_function=jieba.lcut
-
-
-if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
-    embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])  #矩阵和词-索引对照字典
-    feature_dim=embedding_weight.shape[1]
-
-    embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
-    embedding.weight.data.copy_(torch.from_numpy(embedding_weight))
-    embedding.weight.requires_grad=False
-    embedding.to(arg_dict['cuda_device'])
-
-    def collate_fn(batch):
-        jiebaed_text=[word_segmentation_function(sentence) for sentence in batch]  #每个元素是一个句子的列表，由句子中的词语组成
-
-        mapped_text=[[word2id[word] if word in word2id else word2id['UNK'] for word in sentence] for sentence in jiebaed_text]
-        #每个元素是一个句子的列表，由词语对应的索引组成
-
-        max_len=min(arg_dict['max_sentence_length'],max([len(x) for x in mapped_text]))  #padding到的长度，限长
-        padded_list=[pad_list(v,max_len) for v in mapped_text]
-
-        numerical_text=torch.tensor([x[0] for x in padded_list])
-        mask=torch.tensor([x[1] for x in padded_list])
-
-        return (numerical_text,mask)
-
-if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
+if arg_dict['pre_load']=='load':
     for k in dataset_dict:
-        dataloader=DataLoader(dataset_dict[k]['text'],arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
-        temp_embedding=torch.zeros((len(dataset_dict[k]['text'])),feature_dim)
-        matrix_count=-1
-        for batch in tqdm(dataloader):
-            matrix_count+=1
-            outputs=embedding(batch[0].to(arg_dict['cuda_device']))
-            outputs=outputs.sum(axis=1)/batch[1].to(arg_dict['cuda_device']).sum(axis=1).unsqueeze(1)  #我显式把mask部分的嵌入置0了
-            temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
-        dataset_dict[k]['embedding']=temp_embedding
-        print('完成数据集'+k+'嵌入，其维度为：'+str(temp_embedding.size()))
+        dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
+        feature_dim=dataset_dict[k]['embedding'].size()[1]
+else:
+    #文本表征部分
+    #TODO: 速度太慢了，下次直接更新储存文本表征的功能吧
+    if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
+        if arg_dict['word_segmentation']=='jieba':
+            import jieba
+            word_segmentation_function=jieba.lcut
+
+
+    if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
+        embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])  #矩阵和词-索引对照字典
+        feature_dim=embedding_weight.shape[1]
+
+        embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
+        embedding.weight.data.copy_(torch.from_numpy(embedding_weight))
+        embedding.weight.requires_grad=False
+        embedding.to(arg_dict['cuda_device'])
+
+        def collate_fn(batch):
+            jiebaed_text=[word_segmentation_function(sentence) for sentence in batch]  #每个元素是一个句子的列表，由句子中的词语组成
+
+            mapped_text=[[word2id[word] if word in word2id else word2id['UNK'] for word in sentence] for sentence in jiebaed_text]
+            #每个元素是一个句子的列表，由词语对应的索引组成
+
+            max_len=min(arg_dict['max_sentence_length'],max([len(x) for x in mapped_text]))  #padding到的长度，限长
+            padded_list=[pad_list(v,max_len) for v in mapped_text]
+
+            numerical_text=torch.tensor([x[0] for x in padded_list])
+            mask=torch.tensor([x[1] for x in padded_list])
+
+            return (numerical_text,mask)
+
+    if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
+        for k in dataset_dict:
+            dataloader=DataLoader(dataset_dict[k]['text'],arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
+            temp_embedding=torch.zeros((len(dataset_dict[k]['text'])),feature_dim)
+            matrix_count=-1
+            for batch in tqdm(dataloader):
+                matrix_count+=1
+                outputs=embedding(batch[0].to(arg_dict['cuda_device']))
+                outputs_sum=outputs.sum(axis=1)
+                outputs_num=torch.clamp(batch[1].to(arg_dict['cuda_device']).sum(axis=1),min=1)  #以防除0的情况出现 这玩意为0应该是空字符串吧
+                #这里有个问题在于，这个min不能是小于1的浮点数，因为保存不到int里面最后还是会变成0，我快被坑死了啊啊啊啊啊！
+                outputs=outputs_sum/outputs_num.unsqueeze(1)  #我显式把mask部分的嵌入置0了
+                temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
+            dataset_dict[k]['embedding']=temp_embedding
+            print('完成数据集'+k+'嵌入，其维度为：'+str(temp_embedding.size()))
+
+if arg_dict['pre_load']=='save':
+    for k in dataset_dict:
+        torch.save(dataset_dict[k]['embedding'],os.path.join(arg_dict['embedding_folder'],k+'.pt'))
+        print('已存储'+k+'嵌入到'+os.path.join(arg_dict['embedding_folder'],k+'.pt')+'位置！')
 
 #TODO: 感觉上面的内容应该把所有在GPU上的程序先下下来，再继续后面的代码
 
@@ -202,7 +221,7 @@ if arg_dict['running_mode']=='es':  #应用早停机制
     max_metrics=[0 for _ in valid_metrics]
     valid_metrics_values=[]
 
-    for epoch in tqdm(range(arg_dict['epoch_num']),desc='训练分类模型'):
+    for epoch in range(arg_dict['epoch_num']):
         #训练
         #TODO:其他train_metric指标
         if 'loss' in arg_dict['train_metric']:
@@ -216,6 +235,7 @@ if arg_dict['running_mode']=='es':  #应用早停机制
                 this_epoch_loss+=train_loss.item()
             train_loss.backward()
             optimizer.step()
+            
         if 'loss' in arg_dict['train_metric']:
             train_metric_loss.append(this_epoch_loss)
         
@@ -231,6 +251,12 @@ if arg_dict['running_mode']=='es':  #应用早停机制
         #记录指标
         this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
         valid_metrics_values.append(copy(this_epoch_metric))
+        if arg_dict['wandb']:
+            log_dict={valid_metrics[i]:this_epoch_metric[i] for i in range(len(valid_metrics))}
+            log_dict['epoch']=epoch
+            if 'loss' in arg_dict['train_metric']:
+                log_dict['train_loss']=this_epoch_loss
+            wandb.log(log_dict)
 
         if this_epoch_metric[arg_dict['checkpoint_metric']]>max_valid_metric:  #更新checkpoint
             max_valid_metric=this_epoch_metric[arg_dict['checkpoint_metric']]
@@ -241,6 +267,7 @@ if arg_dict['running_mode']=='es':  #应用早停机制
             accumulated_epoch+=1
             if accumulated_epoch>=arg_dict['patience']:
                 print('达到早停标准，停止程序运行')
+                break
         else:
             accumulated_epoch=0
             max_metrics=[max(max_metrics[i],this_epoch_metric[i]) for i in range(len(max_metrics))]
@@ -261,3 +288,6 @@ with torch.no_grad():
 for metric in arg_dict['metric']:
     print(metric)
     print(metric_map[metric](test_label,test_predicts))
+
+if arg_dict['wandb']:
+    wandb.finish()

@@ -8,7 +8,7 @@ def load_w2v_matrix(embedding_path:str,embedding_type:str):
     输出numpy.ndarray格式的矩阵[词数,词向量维度] 和 word2id词典
     """
     if embedding_type=='Chinese-Word-Vectors':
-        #1. 没有pad和UNK的表征，所以直接将索引0设置为pad表征（全0向量）,<UNK>表征则是所有嵌入的平均值
+        #没有pad和UNK的表征，所以直接将索引0设置为pad表征（全0向量）,<UNK>表征则是所有嵌入的平均值
         embedding_list=[]
         embedding_list.append([0 for _ in range(300)])  #这个是pad的向量
         with open(embedding_path) as f:

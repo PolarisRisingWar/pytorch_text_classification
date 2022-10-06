@@ -28,7 +28,7 @@
 
 # 2. 表征方法
 通过`-e`参数传入方法名称
-- 通过word2vec模型得到词表征后，直接离线得到样本表征：天然与后面模型部分解耦（本项目直接将文本嵌入部分前置了。实际上甚至可以预先储存文本嵌入，或者模型一边运行文本一边嵌入，这些我以后再写）。需要分词
+- 通过word2vec模型得到词表征后，直接离线得到样本表征：天然与后面模型部分解耦（本项目直接将文本嵌入部分前置了。预加载词表征可通过`--pre_load`参数实现，`save`值为储存当前的嵌入结果，`load`值为直接使用本地的嵌入结果，`--embedding_path`参数是储存路径。此外还有一边建模一边嵌入的写法，以后再写）。需要分词
     - `w2v_mean`：使用word2vec向量在样本上的平均值，作为样本表征
     - 预训练词向量的路径通过`-ep`参数传入
     - 加载预训练词向量的方法通过`-et`参数传入：
@@ -62,7 +62,7 @@
     `--valid_metric`：每个epoch记录的验证集相应指标（会记录在wandb中）
     `--checkpoint_metric`：保留checkpoint所使用的指标（在valid_metric中的索引）
     `--patience`
-    `--es_metric`：早停所使用的指标（在valid_metric中的索引），可连传多个（如果使用多个，则意为仅当多个指标都没有变好时，才应用早停机制）
+    `--es_metric`：早停所使用的指标（在valid_metric中的索引），可连传多个（如果使用多个，则意为仅当多个指标都没有变好时，才应用早停机制）（←这个具体逻辑我还没搞好，以后再搞吧）
 - `ep`：固定模型运行总epoch数
     `--epoch_num`：固定epoch数
 
@@ -73,3 +73,7 @@
 - `macro-p`：macro-precision
 - `macro-r`：macro-recall
 - `macro-f1`：macro-F1
+
+通过`--wandb`使用wandb来记录日志。本项目公开的wandb项目可见：<https://wandb.ai/afternoon/pytorch_text_cls>（由于项目持续改进，可能所使用的代码与最新的有所不同，但是基本可供参考）
+
+项目中使用的各公开数据集上的结果可参考这篇石墨文档：<https://shimo.im/sheets/1lq7MaMyPBclrwAe/MODOC/>
