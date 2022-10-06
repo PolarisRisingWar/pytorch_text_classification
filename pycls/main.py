@@ -31,6 +31,7 @@ parser.add_argument("--cuda_device",default='cuda:0')
 parser.add_argument('-p','--running_mode',default='es')
 parser.add_argument("--epoch_num",default=10,type=int)
 parser.add_argument("--patience",default=5,type=int)
+parser.add_argument("--valid_metric",default="acc")
 parser.add_argument("--es_metric",default="acc",nargs="+")
 
 parser.add_argument("--metric",default="acc",nargs="+")
@@ -72,6 +73,7 @@ print(arg_dict)
 import json,os,sys
 from tqdm import tqdm
 from datetime import datetime
+from copy import deepcopy
 
 import numpy as np
 
@@ -170,9 +172,11 @@ dev_label=dataset_dict['valid']['label']
 dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
 if arg_dict['running_mode']=='es':  #应用早停机制
+    best_model={}
     accumulated_epoch=0  #早停积累的epoch数
+    max_valid_metric=0  #TODO：验证的这个可以算在早停的指标里面（如有重复）以减少计算量
 
-    max_metrics=[0 for _ in arg_dict['es_metric']]
+    max_metrics=[0 for _ in arg_dict['es_metric']]  #TODO：loss
     es_metric_num=len(arg_dict['es_metric'])
     if 'loss' in arg_dict['es_metric']:  #负向的指标。目前只有loss，如果有别的以后再说
         loss_index=arg_dict['es_metric'].index('loss')
@@ -198,6 +202,12 @@ if arg_dict['running_mode']=='es':  #应用早停机制
                 outputs=model(batch.to(arg_dict['cuda_device']))
                 dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
         
+        valid_metric=metric_map[arg_dict["valid_metric"]](dev_label,dev_predicts)
+        if valid_metric>max_valid_metric:  #更新checkpoint
+            max_valid_metric=valid_metric
+            best_model=deepcopy(model.state_dict())
+
+        
         #早停
         this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in arg_dict['es_metric']]  #TODO：考虑loss
         #除loss以外的指标都赋值，loss位置赋0
@@ -214,6 +224,7 @@ if arg_dict['running_mode']=='es':  #应用早停机制
 
         
 #测试
+model.load_state_dict(best_model)
 test_label=dataset_dict['test']['label']
 test_predicts=[]
 test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
