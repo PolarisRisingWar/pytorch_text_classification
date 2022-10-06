@@ -102,7 +102,7 @@ torch.autograd.set_detect_anomaly(True)
 
 if arg_dict['wandb']:
     import wandb
-    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+'_'+arg_dict['model']+str(datetime.now())[:10],config=arg_dict)
+    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+'_'+arg_dict['model']+'_'+str(datetime.now())[:10],config=arg_dict)
 
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
@@ -314,9 +314,9 @@ model.load_state_dict(best_model)
 test_label=dataset_dict['test']['label']
 test_predicts=[]
 if arg_dict['model']=='mlp':
-    dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
 elif arg_dict['model']=='gru':
-    dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
+    test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['embedding'],dataset_dict['test']['pad_list']),
                             batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
 with torch.no_grad():
