@@ -98,9 +98,11 @@ sys.path.append(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 from pycls.embedding_utils import load_w2v_matrix,pad_list
 from pycls.dataset_utils import load_datasets
 
+torch.autograd.set_detect_anomaly(True)
+
 if arg_dict['wandb']:
     import wandb
-    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+arg_dict['model']+str(datetime.now())[:10],config=arg_dict)
+    wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+'_'+arg_dict['model']+str(datetime.now())[:10],config=arg_dict)
 
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
@@ -108,17 +110,20 @@ dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder']) 
 if arg_dict['pre_load']=='load':
     for k in dataset_dict:
         dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
-        feature_dim=dataset_dict[k]['embedding'].size()[1]
+        feature_dim=dataset_dict[k]['embedding'].size()[-1]
+        print(k+'嵌入的维度为：'+str(dataset_dict[k]['embedding'].size()))
+        if arg_dict['embedding_method']=='w2v':
+            dataset_dict[k]['pad_list']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'),map_location='cpu')
 else:
     #文本表征部分
     #TODO: 速度太慢了，下次直接更新储存文本表征的功能吧
-    if arg_dict['embedding_method']=='w2v_mean':  #需要分词的表示方法，返回分词函数
+    if arg_dict['embedding_method'] in ['w2v','w2v_mean']:  #需要分词的表示方法，返回分词函数
         if arg_dict['word_segmentation']=='jieba':
             import jieba
             word_segmentation_function=jieba.lcut
 
 
-    if arg_dict['embedding_method']=='w2v_mean':  #word2vec系，需要分词
+    if arg_dict['embedding_method'] in ['w2v','w2v_mean']:  #word2vec系，需要分词
         embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])  #矩阵和词-索引对照字典
         feature_dim=embedding_weight.shape[1]
 
@@ -141,26 +146,43 @@ else:
 
             return (numerical_text,mask)
 
-    if arg_dict['embedding_method']=='w2v_mean':  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
+    if arg_dict['embedding_method'] in ['w2v','w2v_mean']:  #词表征系，embedding是将词嵌入为[sample_num,word_max_num,feature_dim]的PyTorch模型
         for k in dataset_dict:
             dataloader=DataLoader(dataset_dict[k]['text'],arg_dict["embedding_batch_size"],shuffle=False,collate_fn=collate_fn)
-            temp_embedding=torch.zeros((len(dataset_dict[k]['text'])),feature_dim)
+            if arg_dict['embedding_method']=='w2v': #不用池化
+                temp_embedding=torch.zeros((len(dataset_dict[k]['text']),arg_dict['max_sentence_length'],feature_dim))
+                temp_padlist=torch.zeros((len(dataset_dict[k]['text']),arg_dict['max_sentence_length']))
+            else:  #需要池化
+                temp_embedding=torch.zeros((len(dataset_dict[k]['text'])),feature_dim)
             matrix_count=-1
             for batch in tqdm(dataloader):
                 matrix_count+=1
                 outputs=embedding(batch[0].to(arg_dict['cuda_device']))
-                outputs_sum=outputs.sum(axis=1)
-                outputs_num=torch.clamp(batch[1].to(arg_dict['cuda_device']).sum(axis=1),min=1)  #以防除0的情况出现 这玩意为0应该是空字符串吧
-                #这里有个问题在于，这个min不能是小于1的浮点数，因为保存不到int里面最后还是会变成0，我快被坑死了啊啊啊啊啊！
-                outputs=outputs_sum/outputs_num.unsqueeze(1)  #我显式把mask部分的嵌入置0了
-                temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
+                if arg_dict['embedding_method']=='w2v':
+                    temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0],\
+                                    :outputs.size()[1],:]=outputs
+                    temp_padlist[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0],\
+                                    :outputs.size()[1]]=batch[1]
+                elif arg_dict['embedding_method']=='w2v_mean':
+                    outputs_sum=outputs.sum(axis=1)
+                    outputs_num=torch.clamp(batch[1].to(arg_dict['cuda_device']).sum(axis=1),min=1)  #以防除0的情况出现 这玩意为0应该是空字符串吧
+                    #这里有个问题在于，这个min不能是小于1的浮点数，因为保存不到int里面最后还是会变成0，我快被坑死了啊啊啊啊啊！
+                    outputs=outputs_sum/outputs_num.unsqueeze(1)  #我显式把mask部分的嵌入置0了
+                    temp_embedding[matrix_count*arg_dict["embedding_batch_size"]:matrix_count*arg_dict["embedding_batch_size"]+batch[0].size()[0]]=outputs
             dataset_dict[k]['embedding']=temp_embedding
             print('完成数据集'+k+'嵌入，其维度为：'+str(temp_embedding.size()))
+            if arg_dict['embedding_method']=='w2v': #不用池化
+                dataset_dict[k]['pad_list']=temp_padlist
+                print('其pad list维度为：'+str(temp_padlist.size()))
+            
 
 if arg_dict['pre_load']=='save':
     for k in dataset_dict:
         torch.save(dataset_dict[k]['embedding'],os.path.join(arg_dict['embedding_folder'],k+'.pt'))
         print('已存储'+k+'嵌入到'+os.path.join(arg_dict['embedding_folder'],k+'.pt')+'位置！')
+        if 'pad_list' in dataset_dict[k]:
+            torch.save(dataset_dict[k]['pad_list'],os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'))
+            print('已存储'+k+'pad list到'+os.path.join(arg_dict['embedding_folder'],k+'_pad.pt')+'位置！')
 
 #TODO: 感觉上面的内容应该把所有在GPU上的程序先下下来，再继续后面的代码
 
@@ -168,6 +190,9 @@ if arg_dict['pre_load']=='save':
 if arg_dict['model']=='mlp':
     from pycls.models import MLP
     model=MLP(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
+if arg_dict['model']=='gru':
+    from pycls.models import GRUEncoder
+    model=GRUEncoder(input_dim=feature_dim,output_dim=arg_dict['output_dim'],num_layers=arg_dict['layer_num'],dropout_rate=arg_dict['dropout'])
 
 model.to(arg_dict['cuda_device'])
 
@@ -181,12 +206,20 @@ metric_map={'acc':lambda y_true,y_pred:accuracy_score(y_true,y_pred),
             'macro-f1':lambda y_true,y_pred:f1_score(y_true,y_pred,average='macro')}
 
 #训练集
-train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
-                            batch_size=arg_dict['train_batch_size'],shuffle=True)
+if arg_dict['model']=='mlp':
+    train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
+                                batch_size=arg_dict['train_batch_size'],shuffle=True)
+elif arg_dict['model']=='gru':
+    train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],dataset_dict['train']['pad_list'],
+                                torch.tensor(dataset_dict['train']['label'])),batch_size=arg_dict['train_batch_size'],shuffle=True)
 
 #验证集
 dev_label=dataset_dict['valid']['label']
-dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+if arg_dict['model']=='mlp':
+    dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+elif arg_dict['model']=='gru':
+    dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
+                            batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
 if arg_dict['running_mode']=='es':  #应用早停机制
     assert len(arg_dict['valid_metric'])>0  #就是说起码需要有验证指标才行
@@ -219,8 +252,15 @@ if arg_dict['running_mode']=='es':  #应用早停机制
         for batch in train_dataloader:
             model.train()
             optimizer.zero_grad()
-            outputs=model(batch[0].to(arg_dict['cuda_device']))
-            train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
+            
+            if arg_dict['model']=='mlp':  #输入是文本
+                outputs=model(batch[0].to(arg_dict['cuda_device']))
+                train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
+            elif arg_dict['model']=='gru':
+                outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+                train_loss=loss_func(outputs,batch[2].to(arg_dict['cuda_device']))
+
+            
             if 'loss' in arg_dict['train_metric']:
                 this_epoch_loss+=train_loss.item()
             train_loss.backward()
@@ -235,11 +275,17 @@ if arg_dict['running_mode']=='es':  #应用早停机制
         with torch.no_grad():
             for batch in dev_dataloader:
                 model.eval()
-                outputs=model(batch.to(arg_dict['cuda_device']))
+
+                if arg_dict['model']=='mlp':  #输入是文本
+                    outputs=model(batch.to(arg_dict['cuda_device']))
+                elif arg_dict['model']=='gru':
+                    outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+
                 dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
         
         #记录指标
         this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
+        #print(this_epoch_metric)  #这个是拿来我每次测试代码时候用的
         valid_metrics_values.append(copy(this_epoch_metric))
         if arg_dict['wandb']:
             log_dict={valid_metrics[i]:this_epoch_metric[i] for i in range(len(valid_metrics))}
@@ -267,12 +313,21 @@ if arg_dict['running_mode']=='es':  #应用早停机制
 model.load_state_dict(best_model)
 test_label=dataset_dict['test']['label']
 test_predicts=[]
-test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+if arg_dict['model']=='mlp':
+    dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+elif arg_dict['model']=='gru':
+    dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
+                            batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
 with torch.no_grad():
     for batch in test_dataloader:
         model.eval()
-        outputs=model(batch.to(arg_dict['cuda_device']))
+        
+        if arg_dict['model']=='mlp':  #输入是文本
+            outputs=model(batch.to(arg_dict['cuda_device']))
+        elif arg_dict['model']=='gru':
+            outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+
         test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
 
 for metric in arg_dict['metric']:
