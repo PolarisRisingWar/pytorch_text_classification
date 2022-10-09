@@ -51,6 +51,7 @@
 - `GRU_op`：GRU（使用最后一步隐藏层作为最终的样本输出）（本项目中用的是变长RNN）
 - `GRU_att`：GRU+attention（注意这个attention理论上是带mask的，但是我没想好这个mask应该怎么实现。另一种实现方式可参考：[Apply mask softmax - PyTorch Forums](https://discuss.pytorch.org/t/apply-mask-softmax/14212/17)）
 - `TextCNN`：TextCNN
+- `TextRCNN`：TextRCNN
 
 各项超参（有些有的模型不能用）：
 - `--optimizer`：默认`Adam`
@@ -87,5 +88,14 @@
 
 项目中使用的各公开数据集上的结果可参考这篇石墨文档：<https://shimo.im/sheets/1lq7MaMyPBclrwAe/MODOC/>
 
-# 6. 参考文献和其他资料
+# 6. 参考文献
 1. torch所使用的随机种子默认值3407参考：[[2109.08203] Torch.manual_seed(3407) is all you need: On the influence of random seeds in deep learning architectures for computer vision](https://arxiv.org/abs/2109.08203)（是不是很震惊于这玩意也能有参考文献？对，我也是这么想的）
+2. TextCNN参考文献：[Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1408.5882)
+3. TextRNN/RNN系列参考文献：[Recurrent Neural Network for Text Classification with Multi-Task Learning](https://arxiv.org/abs/1605.05101)
+4. TextRCNN参考文献：[Recurrent Convolutional Neural Networks for Text Classification](https://ojs.aaai.org/index.php/AAAI/article/view/9513/9372)
+
+# 7. 其他参考资料
+（有些代码针对性的参考资料放在了代码注释部分，本部分仅介绍比较通用的参考资料）
+1. [Pytorch 是如何处理变长序列的 - 作业部落 Cmd Markdown 编辑阅读器](https://www.zybuluo.com/songying/note/1467532)
+2. [pytorch中如何处理RNN输入变长序列padding - 知乎](https://zhuanlan.zhihu.com/p/34418001)
+3. [中文文本分类 pytorch实现 - 知乎](https://zhuanlan.zhihu.com/p/73176084)

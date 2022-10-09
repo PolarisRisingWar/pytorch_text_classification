@@ -215,8 +215,11 @@ if arg_dict['model']=='GRU_att':
 if arg_dict['model']=='TextCNN':
     from pycls.models import TextCNN
     model=TextCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
+if arg_dict['model']=='TextRCNN':
+    from pycls.models import TextRCNN
+    model=TextRCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'],num_layers=arg_dict['layer_num'],dropout_rate=arg_dict['dropout'])
 
-pure_text_model=['mlp','TextCNN']
+pure_text_model=['mlp','TextCNN','TextRCNN']
 #模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的，所以本来就是定长）
 
 text_padlist_model=['gru','GRU_op','GRU_att']  #模型输入是pad好的词向量和pad list
