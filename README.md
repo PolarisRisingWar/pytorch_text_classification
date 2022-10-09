@@ -1,7 +1,7 @@
 本项目致力于整合PyTorch框架下各文本分类方法。  
 目前主要专注于单卡中文分类。
 
-从命令行运行main.py文件实现实验目标。
+从命令行运行main.py文件实现实验目标。  
 具体的使用文档和更新日志，如果真的有人用的话我再写。我现在就主要关注“集成”，对“易用”的要求以后再满足。
 
 # 1. 数据
@@ -17,14 +17,17 @@
 
 （这一部分需要考虑的情况还蛮多的，我以后慢慢补充吧）
 
-理论上倒是也可以自动计算，但是以后再写吧，所以现在需要显式传入的参数：
-`-od`：标签总数
+理论上倒是也可以自动计算，但是还没写，所以现在需要显式传入的参数：
+`-od`：标签总数（即模型输出维度）
 ## 1.1 中文二分类
 - ChnSentiCorp_htl_all.csv：CSV文件下载源<https://raw.githubusercontent.com/SophonPlus/ChineseNlpCorpus/master/datasets/ChnSentiCorp_htl_all/ChnSentiCorp_htl_all.csv>，处理方式为`ChnSentiCorp_htl_all`
 ## 1.2 中文multi-class单标签分类
-## 1.3 中文multi-class multi-label分类
 - iflytek_public：压缩文件下载源<https://storage.googleapis.com/cluebenchmark/tasks/iflytek_public.zip>，处理方式为`iflytek`
+## 1.3 中文multi-class multi-label分类
 ## 1.4 中文多任务multi-class单标签分类
+## 1.5 其他文本分类数据集资料
+1. [SophonPlus/ChineseNlpCorpus: 搜集、整理、发布 中文 自然语言处理 语料/数据集，与 有志之士 共同 促进 中文 自然语言处理 的 发展。](https://github.com/SophonPlus/ChineseNlpCorpus)：ChnSentiCorp_htl_all.csv出处
+2. [文本分类（情感分析）中文数据集汇总 - 知乎](https://zhuanlan.zhihu.com/p/80029681)
 
 # 2. 表征方法
 通过`-e`参数传入方法名称
@@ -56,7 +59,7 @@
 - `--cuda_device`：默认`cuda:0`
 
 # 4. 代码运行模式
-通过`-p`参数传入。
+通过`-p`参数传入。  
 （本部分的`xx_metric`参数都和第五节的指标相同，但还可以添加loss（每个step损失函数的总和，不是准确的总loss值）
 - `es`：（默认值）使用早停策略（只能应用于训练集+验证集+测试集都存在的场景）
     `--epoch_num`：最大epoch数
@@ -64,7 +67,7 @@
     `--valid_metric`：每个epoch记录的验证集相应指标（会记录在wandb中）
     `--checkpoint_metric`：保留checkpoint所使用的指标（在valid_metric中的索引）
     `--patience`
-    `--es_metric`：早停所使用的指标（在valid_metric中的索引），可连传多个（如果使用多个，则意为仅当多个指标都没有好过之前的最好值时时，才应用早停机制）
+    `--es_metric`：早停所使用的指标（在valid_metric中的索引），可连传多个（如果使用多个，则意为仅当多个指标都没有好过之前的最好值时时，才应用早停机制）（←并不确定这种多个场景的操作是否合理）
 - `ep`：固定模型运行总epoch数
     `--epoch_num`：固定epoch数
 
@@ -79,3 +82,6 @@
 通过`--wandb`使用wandb来记录日志。本项目公开的wandb项目可见：<https://wandb.ai/afternoon/pytorch_text_cls>（由于项目持续改进，可能所使用的代码与最新的有所不同，但是基本可供参考）
 
 项目中使用的各公开数据集上的结果可参考这篇石墨文档：<https://shimo.im/sheets/1lq7MaMyPBclrwAe/MODOC/>
+
+# 6. 参考文献和其他资料
+1. torch所使用的随机种子默认值3407参考：[[2109.08203] Torch.manual_seed(3407) is all you need: On the influence of random seeds in deep learning architectures for computer vision](https://arxiv.org/abs/2109.08203)（是不是很震惊于这玩意也能有参考文献？对，我也是这么想的）

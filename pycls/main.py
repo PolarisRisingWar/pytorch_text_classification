@@ -21,6 +21,10 @@ parser.add_argument("-ws","--word_segmentation",default="jieba",help='分词方�
 parser.add_argument("--max_sentence_length",default=512,type=int,help='每一句最长可以输入到模型中的token数')
 
 parser.add_argument("-m","--model",default='mlp',help="文本分类模型名称")
+parser.add_argument("--reappear",action="store_true",help="是否配置可复现性环境")
+parser.add_argument("--torch_random_seed",default=3407,type=int,help="PyTorch使用的随机种子")
+parser.add_argument("--random_random_seed",default=42,type=int,help="random使用的随机种子")  #TODO:暂时还没用
+parser.add_argument("--numpy_random_seed",default=42,type=int,help="numpy使用的随机种子")  #TODO:暂时还没用
 
 parser.add_argument("--optimizer",default="Adam")
 parser.add_argument("--layer_num",default=2,type=int)
@@ -103,6 +107,13 @@ torch.autograd.set_detect_anomaly(True)
 if arg_dict['wandb']:
     import wandb
     wandb.init(project="pytorch_text_cls",name=arg_dict['dataset_type'][0]+'_'+arg_dict['model']+'_'+str(datetime.now())[:10],config=arg_dict)
+
+if arg_dict['reappear']:
+    np.random.seed(arg_dict['torch_random_seed'])
+    torch.manual_seed(arg_dict['torch_random_seed'])
+    torch.backends.cudnn.deterministic=True
+    torch.backends.cudnn.benchmark=False
+    torch.cuda.manual_seed_all(arg_dict['torch_random_seed'])
 
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
