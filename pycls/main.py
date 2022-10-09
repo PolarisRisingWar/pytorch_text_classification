@@ -27,6 +27,7 @@ parser.add_argument("--random_random_seed",default=42,type=int,help="random使�
 parser.add_argument("--numpy_random_seed",default=42,type=int,help="numpy使用的随机种子")  #TODO:暂时还没用
 
 parser.add_argument("--optimizer",default="Adam")
+parser.add_argument("--lr",default=1e-4,type=float)
 parser.add_argument("--layer_num",default=2,type=int)
 parser.add_argument("--hidden_dim",default=128,type=int)
 parser.add_argument("--dropout",default=0.5,type=float)
@@ -56,6 +57,7 @@ assert arg_dict['train_batch_size']>0
 assert arg_dict['inference_batch_size']>0
 assert arg_dict['epoch_num']>0
 assert arg_dict['patience']>0
+assert arg_dict['lr']>0
 assert arg_dict['checkpoint_metric']>=0
 assert arg_dict['dropout']>=0 and arg_dict['dropout']<=1
 
@@ -205,9 +207,16 @@ if arg_dict['model']=='gru':
     from pycls.models import GRUEncoder
     model=GRUEncoder(input_dim=feature_dim,output_dim=arg_dict['output_dim'],num_layers=arg_dict['layer_num'],dropout_rate=arg_dict['dropout'])
 
+pure_text_model=['mlp']  #模型输入是纯文本
+text_padlist_model=['gru']  #模型输入是文本和pad list
+
 model.to(arg_dict['cuda_device'])
 
-optimizer=torch.optim.Adam(params=model.parameters(),lr=1e-4)
+#建立优化器
+if arg_dict['optimizer']=='Adam':
+    optimizer_function=torch.optim.Adam
+optimizer=optimizer_function(params=model.parameters(),lr=arg_dict['lr'])
+
 loss_func=nn.CrossEntropyLoss()
 
 #早停和测试指标
@@ -217,18 +226,18 @@ metric_map={'acc':lambda y_true,y_pred:accuracy_score(y_true,y_pred),
             'macro-f1':lambda y_true,y_pred:f1_score(y_true,y_pred,average='macro')}
 
 #训练集
-if arg_dict['model']=='mlp':
+if arg_dict['model'] in pure_text_model:
     train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
                                 batch_size=arg_dict['train_batch_size'],shuffle=True)
-elif arg_dict['model']=='gru':
+elif arg_dict['model'] in text_padlist_model:
     train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],dataset_dict['train']['pad_list'],
                                 torch.tensor(dataset_dict['train']['label'])),batch_size=arg_dict['train_batch_size'],shuffle=True)
 
 #验证集
 dev_label=dataset_dict['valid']['label']
-if arg_dict['model']=='mlp':
+if arg_dict['model'] in pure_text_model:
     dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
-elif arg_dict['model']=='gru':
+elif arg_dict['model'] in text_padlist_model:
     dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
                             batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
@@ -264,10 +273,10 @@ if arg_dict['running_mode']=='es':  #应用早停机制
             model.train()
             optimizer.zero_grad()
             
-            if arg_dict['model']=='mlp':  #输入是文本
+            if arg_dict['model'] in pure_text_model:
                 outputs=model(batch[0].to(arg_dict['cuda_device']))
                 train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
-            elif arg_dict['model']=='gru':
+            elif arg_dict['model'] in text_padlist_model:
                 outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
                 train_loss=loss_func(outputs,batch[2].to(arg_dict['cuda_device']))
 
@@ -287,9 +296,9 @@ if arg_dict['running_mode']=='es':  #应用早停机制
             for batch in dev_dataloader:
                 model.eval()
 
-                if arg_dict['model']=='mlp':  #输入是文本
+                if arg_dict['model'] in pure_text_model:
                     outputs=model(batch.to(arg_dict['cuda_device']))
-                elif arg_dict['model']=='gru':
+                elif arg_dict['model'] in text_padlist_model:
                     outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
 
                 dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
@@ -324,9 +333,9 @@ if arg_dict['running_mode']=='es':  #应用早停机制
 model.load_state_dict(best_model)
 test_label=dataset_dict['test']['label']
 test_predicts=[]
-if arg_dict['model']=='mlp':
+if arg_dict['model'] in pure_text_model:
     test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
-elif arg_dict['model']=='gru':
+elif arg_dict['model'] in text_padlist_model:
     test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['embedding'],dataset_dict['test']['pad_list']),
                             batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
@@ -334,9 +343,9 @@ with torch.no_grad():
     for batch in test_dataloader:
         model.eval()
         
-        if arg_dict['model']=='mlp':  #输入是文本
+        if arg_dict['model'] in pure_text_model:
             outputs=model(batch.to(arg_dict['cuda_device']))
-        elif arg_dict['model']=='gru':
+        elif arg_dict['model'] in text_padlist_model:
             outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
 
         test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
