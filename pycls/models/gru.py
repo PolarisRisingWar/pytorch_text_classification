@@ -11,7 +11,7 @@ class GRUEncoder(nn.Module):
 
     def forward(self,x,pad_list):  #x是一个padding后的Tensor，seq_len是对应的长度
         op,hn=self.rnns(x)
-        op=torch.mul(op,pad_list.unsqueeze(2).repeat(1,1,op.size()[2]))  #不能直接使用op[pad_list==0]=0：会报in-place变化的错，总之会报错
+        op=torch.mul(op,pad_list.unsqueeze(2).repeat(1,1,op.size()[2]))  #不能直接使用op[pad_list==0]=0：会报in-place变化的错
         outputs_sum=op.sum(axis=1)
         outputs_num=torch.clamp(pad_list.sum(axis=1),min=1)
         outputs=outputs_sum/outputs_num.unsqueeze(1)

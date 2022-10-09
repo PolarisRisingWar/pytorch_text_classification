@@ -48,6 +48,8 @@
 通过`-m`参数传入模型名称，及可用的超参：（有些模型具体的参数，如GRU是否双向等，懒得调了，以后再改吧）
 - `mlp`：线性分类器
 - `gru`：GRU（使用每一步隐藏层的平均池化作为最终的样本输出）
+- `GRU_op`：GRU（使用最后一步隐藏层作为最终的样本输出）（本项目中用的是变长RNN）
+- `GRU_att`：GRU+attention（注意这个attention理论上是带mask的，但是我没想好这个mask应该怎么实现。另一种实现方式可参考：[Apply mask softmax - PyTorch Forums](https://discuss.pytorch.org/t/apply-mask-softmax/14212/17)）
 - `TextCNN`：TextCNN
 
 各项超参（有些有的模型不能用）：
