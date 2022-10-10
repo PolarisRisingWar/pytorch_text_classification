@@ -66,12 +66,13 @@
     - `GRU_att`：GRU+attention（注意这个attention理论上是带mask的，但是我没想好这个mask应该怎么实现。另一种实现方式可参考：[Apply mask softmax - PyTorch Forums](https://discuss.pytorch.org/t/apply-mask-softmax/14212/17)）
 - `TextCNN`：TextCNN
 - `TextRCNN`：TextRCNN（我直接参考了这个GitHub项目的代码，即直接使用通用RNN实现，而没有用论文中的循环神经网络，具体细节可以参考这个项目的博文：[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)）
+- `DPCNN`：DPCNN
 - FastText系
-    `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化）
+    `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化；或自己重新训练）（还没实现，我不会C++所以FastText官方代码复现对我来说难度太高了，然后我看了一下[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)的实现，主要是我没看懂它这个bi-gram和tri-gram怎么做的？以后再搞吧）
 
 需要对文本进行分词：
 - FastText系
-    - `FastText_official`：使用FastText官方包实现FastText分类模型（官方代码是用C++实现的，奇快无比）。入参`--fastText_temp_folder`放置训练集（如果有验证集将直接包括进来）和测试集的文件，入参`--fastText_temp_mode`选择是创建新文件直接覆盖原位置`new`还是使用旧文件`old`（官方包的安装方式可参考[fastText Python 教程_诸神缄默不语的博客-CSDN博客_fasttext python](https://blog.csdn.net/PolarisRisingWar/article/details/125442854)）
+    - `FastText_official`：使用FastText官方包实现FastText分类模型（官方代码是用C++实现的，奇快无比）。入参`--fastText_temp_folder`放置训练集（如果有验证集将直接包括进来）和测试集的文件，入参`--fastText_temp_mode`选择是创建新文件直接覆盖原位置`new`还是使用旧文件`old`（官方项目：[facebookresearch/fastText: Library for fast text representation and classification.](https://github.com/facebookresearch/fastText) 包安装方式可参考[fastText Python 教程_诸神缄默不语的博客-CSDN博客_fasttext python](https://blog.csdn.net/PolarisRisingWar/article/details/125442854)）
 
 各项超参（有些有的模型不能用）：
 - `--optimizer`：默认`Adam`
@@ -114,6 +115,7 @@
 3. TextRNN/RNN系列参考文献：[Recurrent Neural Network for Text Classification with Multi-Task Learning](https://arxiv.org/abs/1605.05101)
 4. TextRCNN参考文献：[Recurrent Convolutional Neural Networks for Text Classification](https://ojs.aaai.org/index.php/AAAI/article/view/9513/9372)
 5. FastText参考文献：[Bag of Tricks for Efficient Text Classification](https://arxiv.org/abs/1607.01759)
+6. DPCNN参考文献：[Deep Pyramid Convolutional Neural Networks for Text Categorization](https://aclanthology.org/P17-1052)
 
 # 其他参考资料
 （有些代码针对性的参考资料放在了代码注释部分，本部分仅介绍比较通用的参考资料）

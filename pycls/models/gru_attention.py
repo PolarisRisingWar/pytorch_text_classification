@@ -12,7 +12,10 @@ class GRU_Attention(nn.Module):
 
         self.rnns=nn.GRU(input_size=input_dim,hidden_size=hidden_dim,num_layers=num_layers,bias=bias,dropout=dropout_rate,bidirectional=bidirectional,
                         batch_first=True)
+                        
         self.w=nn.Parameter(torch.zeros(hidden_dim*num_directions,1))
+        #不直接用torch.tensor参考：https://github.com/649453932/Chinese-Text-Classification-Pytorch/issues/8
+
         self.lin=nn.Linear(in_features=hidden_dim*num_directions,out_features=output_dim)
 
         self.tanh1 = nn.Tanh()

@@ -140,6 +140,7 @@ else:
 
     if arg_dict['embedding_method'] in ['w2v','w2v_mean']:  #word2vec系，需要分词
         embedding_weight,word2id=load_w2v_matrix(arg_dict['embedding_model_path'],arg_dict['embedding_model_type'])  #矩阵和词-索引对照字典
+        #TODO: 看到有一种写法是将词表写成字典的形式。还没有测试过哪种更快
         feature_dim=embedding_weight.shape[1]
 
         embedding=nn.Embedding(embedding_weight.shape[0],feature_dim)
@@ -237,9 +238,12 @@ if arg_dict['model']=='TextCNN':
 if arg_dict['model']=='TextRCNN':
     from pycls.models import TextRCNN
     model=TextRCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'],num_layers=arg_dict['layer_num'],dropout_rate=arg_dict['dropout'])
+if arg_dict['model']=='DPCNN':
+    from pycls.models import DPCNN
+    model=DPCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'])
 if arg_dict['model']=='FastText_official':
     import fasttext
-    model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'))
+    model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'),lr=arg_dict['lr'],epoch=arg_dict['epoch_num'])
     test_text_list=[x.strip() for x in open(os.path.join(arg_dict['fastText_temp_folder'],'test.txt')).readlines()]
     predict_result=model.predict(test_text_list)
     #第一个元素是预测结果列表，第二个元素是概率列表
@@ -253,8 +257,8 @@ metric_map={'acc':lambda y_true,y_pred:accuracy_score(y_true,y_pred),
             'macro-f1':lambda y_true,y_pred:f1_score(y_true,y_pred,average='macro')}
 
 if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
-    pure_text_model=['mlp','TextCNN','TextRCNN']
-    #模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的，所以本来就是定长）
+    pure_text_model=['mlp','TextCNN','TextRCNN','DPCNN']
+    #模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的……是否宜于模型实现，此条可以再议）
 
     text_padlist_model=['gru','GRU_op','GRU_att']  #模型输入是pad好的词向量和pad list
 
