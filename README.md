@@ -68,7 +68,8 @@
 - `TextRCNN`：TextRCNN（我直接参考了这个GitHub项目的代码，即直接使用通用RNN实现，而没有用论文中的循环神经网络，具体细节可以参考这个项目的博文：[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)）
 - `DPCNN`：DPCNN
 - FastText系
-    `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化；或自己重新训练）（还没实现，我不会C++所以FastText官方代码复现对我来说难度太高了，然后我看了一下[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)的实现，主要是我没看懂它这个bi-gram和tri-gram怎么做的？以后再搞吧）
+    - `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化；或自己重新训练）（还没实现，我不会C++所以FastText官方代码复现对我来说难度太高了，然后我看了一下[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)的实现，主要是我没看懂它这个bi-gram和tri-gram怎么做的？以后再搞吧）
+- `Transformer_Mean`：transformer encoder + masked mean pooling (参数都是from scratch训练的)
 
 需要对文本进行分词：
 - FastText系

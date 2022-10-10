@@ -241,6 +241,9 @@ if arg_dict['model']=='TextRCNN':
 if arg_dict['model']=='DPCNN':
     from pycls.models import DPCNN
     model=DPCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'])
+if arg_dict['model']=='Transformer_Mean':
+    from pycls.models import TransformerClassifier
+    model=TransformerClassifier(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
 if arg_dict['model']=='FastText_official':
     import fasttext
     model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'),lr=arg_dict['lr'],epoch=arg_dict['epoch_num'])
@@ -260,7 +263,7 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
     pure_text_model=['mlp','TextCNN','TextRCNN','DPCNN']
     #模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的……是否宜于模型实现，此条可以再议）
 
-    text_padlist_model=['gru','GRU_op','GRU_att']  #模型输入是pad好的词向量和pad list
+    text_padlist_model=['gru','GRU_op','GRU_att','Transformer_Mean']  #模型输入是pad好的词向量和pad list
 
     model.to(arg_dict['cuda_device'])
 

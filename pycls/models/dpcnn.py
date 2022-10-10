@@ -25,7 +25,7 @@ class DPCNN(nn.Module):
 
         op=self.ewc(self.relu(x))
         op=self.ewc(self.relu(op))
-        x+=op
+        x+=op  #我参考的代码里没实现这个残差：https://github.com/649453932/Chinese-Text-Classification-Pytorch/issues/28
 
         while x.size()[2]>=2:
             x=self.maxpool(x)
