@@ -21,6 +21,9 @@ parser.add_argument("-ws","--word_segmentation",default="jieba",help='分词方�
 parser.add_argument("--max_sentence_length",default=512,type=int,help='每一句最长可以输入到模型中的token数')
 
 parser.add_argument("-m","--model",default='mlp',help="文本分类模型名称")
+parser.add_argument("--fastText_temp_folder",help='FastText官方代码复现时存储临时文本文件的文件夹')
+parser.add_argument("--fastText_temp_mode",default="new")
+
 parser.add_argument("--reappear",action="store_true",help="是否配置可复现性环境")
 parser.add_argument("--torch_random_seed",default=3407,type=int,help="PyTorch使用的随机种子")
 parser.add_argument("--random_random_seed",default=42,type=int,help="random使用的随机种子")  #TODO:暂时还没用
@@ -120,7 +123,8 @@ if arg_dict['reappear']:
 #导入数据
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
 
-if arg_dict['pre_load']=='load':
+#文本表征或其他文本预处理工作
+if arg_dict['pre_load']=='load' or not (arg_dict['model']=='FastText_official'):
     for k in dataset_dict:
         dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
         feature_dim=dataset_dict[k]['embedding'].size()[-1]
@@ -128,9 +132,7 @@ if arg_dict['pre_load']=='load':
         if arg_dict['embedding_method']=='w2v':
             dataset_dict[k]['pad_list']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'),map_location='cpu')
 else:
-    #文本表征部分
-    #TODO: 速度太慢了，下次直接更新储存文本表征的功能吧
-    if arg_dict['embedding_method'] in ['w2v','w2v_mean']:  #需要分词的表示方法，返回分词函数
+    if arg_dict['embedding_method'] in ['w2v','w2v_mean'] or (arg_dict['model']=='FastText_official'):  #需要分词的表示方法，返回分词函数
         if arg_dict['word_segmentation']=='jieba':
             import jieba
             word_segmentation_function=jieba.lcut
@@ -187,6 +189,23 @@ else:
             if arg_dict['embedding_method']=='w2v': #不用池化
                 dataset_dict[k]['pad_list']=temp_padlist
                 print('其pad list维度为：'+str(temp_padlist.size()))
+    
+    if arg_dict['model']=='FastText_official' and arg_dict['fastText_temp_mode']=='new':  #需要分词后储存到本地
+        print('正在将数据处理为FastText格式……')
+        train_txt=open(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'),'w')
+        test_txt=open(os.path.join(arg_dict['fastText_temp_folder'],'test.txt'),'w')
+        for k in dataset_dict:
+            sample_num=len(dataset_dict[k]['text'])
+            if k in ['train','valid']:
+                train_txt.writelines([' '.join(word_segmentation_function(dataset_dict[k]['text'][i]))+' __label__'+str(dataset_dict[k]['label'][i])+'\n'\
+                                     for i in range(sample_num)])
+            if k in ['test']:
+                test_txt.writelines([' '.join(word_segmentation_function(dataset_dict[k]['text'][i]))+'\n' for i in range(sample_num)])
+        train_txt.close()
+        test_txt.close()
+        print('处理完毕！')
+
+
             
 
 if arg_dict['pre_load']=='save':
@@ -218,152 +237,161 @@ if arg_dict['model']=='TextCNN':
 if arg_dict['model']=='TextRCNN':
     from pycls.models import TextRCNN
     model=TextRCNN(input_dim=feature_dim,output_dim=arg_dict['output_dim'],num_layers=arg_dict['layer_num'],dropout_rate=arg_dict['dropout'])
+if arg_dict['model']=='FastText_official':
+    import fasttext
+    model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'))
+    test_text_list=[x.strip() for x in open(os.path.join(arg_dict['fastText_temp_folder'],'test.txt')).readlines()]
+    predict_result=model.predict(test_text_list)
+    #第一个元素是预测结果列表，第二个元素是概率列表
+    predict_result=predict_result[0]  #每个元素是一个样本的预测结果，每个元素是__label__xx的格式
+    test_predicts=[[int(x[9:]) for x in y] for y in predict_result]  #转换为int格式
 
-pure_text_model=['mlp','TextCNN','TextRCNN']
-#模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的，所以本来就是定长）
-
-text_padlist_model=['gru','GRU_op','GRU_att']  #模型输入是pad好的词向量和pad list
-
-model.to(arg_dict['cuda_device'])
-
-#建立优化器
-if arg_dict['optimizer']=='Adam':
-    optimizer_function=torch.optim.Adam
-optimizer=optimizer_function(params=model.parameters(),lr=arg_dict['lr'])
-
-loss_func=nn.CrossEntropyLoss()
-
-#早停和测试指标
+#早停和测试指标：提出来是为了pipeline之外的模型使用
 metric_map={'acc':lambda y_true,y_pred:accuracy_score(y_true,y_pred),
             'macro-p':lambda y_true,y_pred:precision_score(y_true,y_pred,average='macro'),
             'macro-r':lambda y_true,y_pred:recall_score(y_true,y_pred,average='macro'),
             'macro-f1':lambda y_true,y_pred:f1_score(y_true,y_pred,average='macro')}
 
-#训练集
-if arg_dict['model'] in pure_text_model:
-    train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
-                                batch_size=arg_dict['train_batch_size'],shuffle=True)
-elif arg_dict['model'] in text_padlist_model:
-    train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],dataset_dict['train']['pad_list'],
-                                torch.tensor(dataset_dict['train']['label'])),batch_size=arg_dict['train_batch_size'],shuffle=True)
+if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
+    pure_text_model=['mlp','TextCNN','TextRCNN']
+    #模型输入是每个样本的向量（简单来说就是通用分类模型）或者pad好的词向量（我是限制通长max_sentence_length的，所以本来就是定长）
 
-#验证集
-dev_label=dataset_dict['valid']['label']
-if arg_dict['model'] in pure_text_model:
-    dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
-elif arg_dict['model'] in text_padlist_model:
-    dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
-                            batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    text_padlist_model=['gru','GRU_op','GRU_att']  #模型输入是pad好的词向量和pad list
 
-if arg_dict['running_mode']=='es':  #应用早停机制
-    assert len(arg_dict['valid_metric'])>0  #就是说起码需要有验证指标才行
-    assert arg_dict['checkpoint_metric']<len(arg_dict['valid_metric'])
+    model.to(arg_dict['cuda_device'])
 
-    max_valid_metric=0  #用以衡量最终使用哪个epoch的checkpoint
-    best_model={}
-    accumulated_epoch=0  #早停积累的epoch数
+    #建立优化器
+    if arg_dict['optimizer']=='Adam':
+        optimizer_function=torch.optim.Adam
+    optimizer=optimizer_function(params=model.parameters(),lr=arg_dict['lr'])
 
-    #训练集指标
-    train_metrics=copy(arg_dict['train_metric'])
-    if 'loss' in arg_dict['train_metric']:
-        train_metrics.remove('loss')
-        train_metric_loss=[]
-    train_metrics_values=[]
+    loss_func=nn.CrossEntropyLoss()
 
-    #验证集指标
-    valid_metrics=copy(arg_dict['valid_metric'])
-    if 'loss' in arg_dict['valid_metric']:
-        valid_metrics.remove('loss')
-        max_metrics_loss=float('inf')
-    max_metrics=[0 for _ in valid_metrics]
-    valid_metrics_values=[]
+    #训练集
+    if arg_dict['model'] in pure_text_model:
+        train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],torch.tensor(dataset_dict['train']['label'])),
+                                    batch_size=arg_dict['train_batch_size'],shuffle=True)
+    elif arg_dict['model'] in text_padlist_model:
+        train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],dataset_dict['train']['pad_list'],
+                                    torch.tensor(dataset_dict['train']['label'])),batch_size=arg_dict['train_batch_size'],shuffle=True)
 
-    for epoch in range(arg_dict['epoch_num']):
-        #训练
-        #TODO:其他train_metric指标
+    #验证集
+    dev_label=dataset_dict['valid']['label']
+    if arg_dict['model'] in pure_text_model:
+        dev_dataloader=DataLoader(dataset_dict['valid']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    elif arg_dict['model'] in text_padlist_model:
+        dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
+                                batch_size=arg_dict['inference_batch_size'],shuffle=False)
+
+    if arg_dict['running_mode']=='es':  #应用早停机制
+        assert len(arg_dict['valid_metric'])>0  #就是说起码需要有验证指标才行
+        assert arg_dict['checkpoint_metric']<len(arg_dict['valid_metric'])
+
+        max_valid_metric=0  #用以衡量最终使用哪个epoch的checkpoint
+        best_model={}
+        accumulated_epoch=0  #早停积累的epoch数
+
+        #训练集指标
+        train_metrics=copy(arg_dict['train_metric'])
         if 'loss' in arg_dict['train_metric']:
-            this_epoch_loss=0
-        for batch in train_dataloader:
-            model.train()
-            optimizer.zero_grad()
-            
-            if arg_dict['model'] in pure_text_model:
-                outputs=model(batch[0].to(arg_dict['cuda_device']))
-                train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
-            elif arg_dict['model'] in text_padlist_model:
-                outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
-                train_loss=loss_func(outputs,batch[2].to(arg_dict['cuda_device']))
+            train_metrics.remove('loss')
+            train_metric_loss=[]
+        train_metrics_values=[]
 
-            
+        #验证集指标
+        valid_metrics=copy(arg_dict['valid_metric'])
+        if 'loss' in arg_dict['valid_metric']:
+            valid_metrics.remove('loss')
+            max_metrics_loss=float('inf')
+        max_metrics=[0 for _ in valid_metrics]
+        valid_metrics_values=[]
+
+        for epoch in range(arg_dict['epoch_num']):
+            #训练
+            #TODO:其他train_metric指标
             if 'loss' in arg_dict['train_metric']:
-                this_epoch_loss+=train_loss.item()
-            train_loss.backward()
-            optimizer.step()
-            
-        if 'loss' in arg_dict['train_metric']:
-            train_metric_loss.append(this_epoch_loss)
-        
-        #验证
-        dev_predicts=[]
-        #TODO：验证集损失函数
-        with torch.no_grad():
-            for batch in dev_dataloader:
-                model.eval()
-
+                this_epoch_loss=0
+            for batch in train_dataloader:
+                model.train()
+                optimizer.zero_grad()
+                
                 if arg_dict['model'] in pure_text_model:
-                    outputs=model(batch.to(arg_dict['cuda_device']))
+                    outputs=model(batch[0].to(arg_dict['cuda_device']))
+                    train_loss=loss_func(outputs,batch[1].to(arg_dict['cuda_device']))
                 elif arg_dict['model'] in text_padlist_model:
                     outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+                    train_loss=loss_func(outputs,batch[2].to(arg_dict['cuda_device']))
 
-                dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
-        
-        #记录指标
-        this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
-        #print(this_epoch_metric)  #这个是拿来我每次测试代码时候用的
-        valid_metrics_values.append(copy(this_epoch_metric))
-        if arg_dict['wandb']:
-            log_dict={valid_metrics[i]:this_epoch_metric[i] for i in range(len(valid_metrics))}
-            log_dict['epoch']=epoch
+                
+                if 'loss' in arg_dict['train_metric']:
+                    this_epoch_loss+=train_loss.item()
+                train_loss.backward()
+                optimizer.step()
+                
             if 'loss' in arg_dict['train_metric']:
-                log_dict['train_loss']=this_epoch_loss
-            wandb.log(log_dict)
+                train_metric_loss.append(this_epoch_loss)
+            
+            #验证
+            dev_predicts=[]
+            #TODO：验证集损失函数
+            with torch.no_grad():
+                for batch in dev_dataloader:
+                    model.eval()
 
-        if this_epoch_metric[arg_dict['checkpoint_metric']]>max_valid_metric:  #更新checkpoint
-            max_valid_metric=this_epoch_metric[arg_dict['checkpoint_metric']]
-            best_model=deepcopy(model.state_dict())
+                    if arg_dict['model'] in pure_text_model:
+                        outputs=model(batch.to(arg_dict['cuda_device']))
+                    elif arg_dict['model'] in text_padlist_model:
+                        outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
 
-        #早停
-        if all([this_epoch_metric[i]<max_metrics[i] for i in range(len(max_metrics))]):
-            accumulated_epoch+=1
-            if accumulated_epoch>=arg_dict['patience']:
-                print('达到早停标准，停止程序运行')
-                break
-        else:
-            accumulated_epoch=0
-            max_metrics=[max(max_metrics[i],this_epoch_metric[i]) for i in range(len(max_metrics))]
+                    dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
+            
+            #记录指标
+            this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
+            #print(this_epoch_metric)  #这个是拿来我每次测试代码时候用的
+            valid_metrics_values.append(copy(this_epoch_metric))
+            if arg_dict['wandb']:
+                log_dict={valid_metrics[i]:this_epoch_metric[i] for i in range(len(valid_metrics))}
+                log_dict['epoch']=epoch
+                if 'loss' in arg_dict['train_metric']:
+                    log_dict['train_loss']=this_epoch_loss
+                wandb.log(log_dict)
 
-        
-#测试
-model.load_state_dict(best_model)
+            if this_epoch_metric[arg_dict['checkpoint_metric']]>max_valid_metric:  #更新checkpoint
+                max_valid_metric=this_epoch_metric[arg_dict['checkpoint_metric']]
+                best_model=deepcopy(model.state_dict())
+
+            #早停
+            if all([this_epoch_metric[i]<max_metrics[i] for i in range(len(max_metrics))]):
+                accumulated_epoch+=1
+                if accumulated_epoch>=arg_dict['patience']:
+                    print('达到早停标准，停止程序运行')
+                    break
+            else:
+                accumulated_epoch=0
+                max_metrics=[max(max_metrics[i],this_epoch_metric[i]) for i in range(len(max_metrics))]
+
+            
+    #测试
+    model.load_state_dict(best_model)
+    test_predicts=[]
+    if arg_dict['model'] in pure_text_model:
+        test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    elif arg_dict['model'] in text_padlist_model:
+        test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['embedding'],dataset_dict['test']['pad_list']),
+                                batch_size=arg_dict['inference_batch_size'],shuffle=False)
+
+    with torch.no_grad():
+        for batch in test_dataloader:
+            model.eval()
+            
+            if arg_dict['model'] in pure_text_model:
+                outputs=model(batch.to(arg_dict['cuda_device']))
+            elif arg_dict['model'] in text_padlist_model:
+                outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+
+            test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
+
 test_label=dataset_dict['test']['label']
-test_predicts=[]
-if arg_dict['model'] in pure_text_model:
-    test_dataloader=DataLoader(dataset_dict['test']['embedding'],batch_size=arg_dict['inference_batch_size'],shuffle=False)
-elif arg_dict['model'] in text_padlist_model:
-    test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['embedding'],dataset_dict['test']['pad_list']),
-                            batch_size=arg_dict['inference_batch_size'],shuffle=False)
-
-with torch.no_grad():
-    for batch in test_dataloader:
-        model.eval()
-        
-        if arg_dict['model'] in pure_text_model:
-            outputs=model(batch.to(arg_dict['cuda_device']))
-        elif arg_dict['model'] in text_padlist_model:
-            outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
-
-        test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
-
 for metric in arg_dict['metric']:
     print(metric)
     print(metric_map[metric](test_label,test_predicts))

@@ -1,5 +1,6 @@
 本项目致力于整合PyTorch框架下各文本分类方法。  
-目前主要专注于单卡中文分类。
+目前主要专注于单卡中文分类。  
+有些模型多种实现方式都放在项目里面了。
 
 从命令行运行main.py文件实现实验目标。  
 具体的使用文档和更新日志，如果真的有人用的话我再写。我现在就主要关注“集成”，对“易用”的要求以后再满足。
@@ -54,13 +55,23 @@
 
 # 文本分类模型
 通过`-m`参数传入模型名称，及可用的超参：（有些模型具体的参数，如GRU是否双向等，懒得调了，以后再改吧）
+
+需要直接对每个文本样本进行表征，然后用传统分类器建模：
 - `mlp`：线性分类器
-- `gru`：GRU（使用每一步隐藏层的平均池化作为最终的样本输出）
-- `GRU_op`：GRU（使用最后一步隐藏层作为最终的样本输出）（本项目中用的是变长RNN）
-- `GRU_att`：GRU+attention（注意这个attention理论上是带mask的，但是我没想好这个mask应该怎么实现。另一种实现方式可参考：[Apply mask softmax - PyTorch Forums](https://discuss.pytorch.org/t/apply-mask-softmax/14212/17)）
+
+需要将文本转换为词向量：
+- RNN系
+    - `gru`：GRU（使用每一步隐藏层的平均池化作为最终的样本输出）
+    - `GRU_op`：GRU（使用最后一步隐藏层作为最终的样本输出）（本项目中用的是变长RNN）
+    - `GRU_att`：GRU+attention（注意这个attention理论上是带mask的，但是我没想好这个mask应该怎么实现。另一种实现方式可参考：[Apply mask softmax - PyTorch Forums](https://discuss.pytorch.org/t/apply-mask-softmax/14212/17)）
 - `TextCNN`：TextCNN
 - `TextRCNN`：TextRCNN（我直接参考了这个GitHub项目的代码，即直接使用通用RNN实现，而没有用论文中的循环神经网络，具体细节可以参考这个项目的博文：[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)）
-- `FastText_official`：使用FastText
+- FastText系
+    `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化）
+
+需要对文本进行分词：
+- FastText系
+    - `FastText_official`：使用FastText官方包实现FastText分类模型（官方代码是用C++实现的，奇快无比）。入参`--fastText_temp_folder`放置训练集（如果有验证集将直接包括进来）和测试集的文件，入参`--fastText_temp_mode`选择是创建新文件直接覆盖原位置`new`还是使用旧文件`old`（官方包的安装方式可参考[fastText Python 教程_诸神缄默不语的博客-CSDN博客_fasttext python](https://blog.csdn.net/PolarisRisingWar/article/details/125442854)）
 
 各项超参（有些有的模型不能用）：
 - `--optimizer`：默认`Adam`
@@ -102,6 +113,7 @@
 2. TextCNN参考文献：[Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1408.5882)
 3. TextRNN/RNN系列参考文献：[Recurrent Neural Network for Text Classification with Multi-Task Learning](https://arxiv.org/abs/1605.05101)
 4. TextRCNN参考文献：[Recurrent Convolutional Neural Networks for Text Classification](https://ojs.aaai.org/index.php/AAAI/article/view/9513/9372)
+5. FastText参考文献：[Bag of Tricks for Efficient Text Classification](https://arxiv.org/abs/1607.01759)
 
 # 其他参考资料
 （有些代码针对性的参考资料放在了代码注释部分，本部分仅介绍比较通用的参考资料）
