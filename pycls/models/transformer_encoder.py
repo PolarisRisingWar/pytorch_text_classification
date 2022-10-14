@@ -1,7 +1,8 @@
 #参考https://github.com/649453932/Chinese-Text-Classification-Pytorch/blob/master/models/Transformer.py（这个的实现更底层，且有其他细微差异）
 #参考https://pytorch.org/docs/stable/_modules/torch/nn/modules/transformer.html#TransformerEncoder
+#参考 pytorch nn.Transformer 的 mask 理解 https://www.cvmart.net/community/detail/4493
+#参考 A detailed guide to PyTorch’s nn.Transformer() module. https://towardsdatascience.com/a-detailed-guide-to-pytorchs-nn-transformer-module-c80afbc9ffb1
 
-from cmath import isnan
 import numpy as np
 
 import torch

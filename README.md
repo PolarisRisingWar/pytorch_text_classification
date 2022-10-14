@@ -75,6 +75,10 @@
 - FastText系
     - `FastText_official`：使用FastText官方包实现FastText分类模型（官方代码是用C++实现的，奇快无比）。入参`--fastText_temp_folder`放置训练集（如果有验证集将直接包括进来）和测试集的文件，入参`--fastText_temp_mode`选择是创建新文件直接覆盖原位置`new`还是使用旧文件`old`（官方项目：[facebookresearch/fastText: Library for fast text representation and classification.](https://github.com/facebookresearch/fastText) 包安装方式可参考[fastText Python 教程_诸神缄默不语的博客-CSDN博客_fasttext python](https://blog.csdn.net/PolarisRisingWar/article/details/125442854)）
 
+预训练模型（需要使用内置分词器实现分词，而且不需要提前嵌入（理论上也可以实现提前嵌入，但是感觉应该没必要））：  
+（使用transformers包实现调用）
+- `Bert`
+
 各项超参（有些有的模型不能用）：
 - `--optimizer`：默认`Adam`
 - `--lr`：默认1e-4
@@ -107,16 +111,20 @@
 - `macro-f1`：macro-F1
 
 通过`--wandb`使用wandb来记录日志。本项目公开的wandb项目可见：<https://wandb.ai/afternoon/pytorch_text_cls>（由于项目持续改进，可能所使用的代码与最新的有所不同，但是基本可供参考）
+（值得注意的是，其中的train_loss一值因为我是累加的，所以batch size小时本身值就会很大。很大程度上可以说这种写法只能在相同batch size下作比较……）
 
 项目中使用的各公开数据集上的结果可参考这篇石墨文档：<https://shimo.im/sheets/1lq7MaMyPBclrwAe/MODOC/>
 
 # 参考文献
 1. torch所使用的随机种子默认值3407参考：[[2109.08203] Torch.manual_seed(3407) is all you need: On the influence of random seeds in deep learning architectures for computer vision](https://arxiv.org/abs/2109.08203)（是不是很震惊于这玩意也能有参考文献？对，我也是这么想的）
 2. TextCNN参考文献：[Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1408.5882)
+3. TextCNN相关参考文献
+    1. [A Sensitivity Analysis of (and Practitioners' Guide to) Convolutional Neural Networks for Sentence Classification](https://arxiv.org/abs/1510.03820)
 3. TextRNN/RNN系列参考文献：[Recurrent Neural Network for Text Classification with Multi-Task Learning](https://arxiv.org/abs/1605.05101)
 4. TextRCNN参考文献：[Recurrent Convolutional Neural Networks for Text Classification](https://ojs.aaai.org/index.php/AAAI/article/view/9513/9372)
 5. FastText参考文献：[Bag of Tricks for Efficient Text Classification](https://arxiv.org/abs/1607.01759)
 6. DPCNN参考文献：[Deep Pyramid Convolutional Neural Networks for Text Categorization](https://aclanthology.org/P17-1052)
+7. Transformer参考文献：[Attention Is All You Need](https://arxiv.org/abs/1706.03762)
 
 # 其他参考资料
 （有些代码针对性的参考资料放在了代码注释部分，本部分仅介绍比较通用的参考资料）
@@ -124,3 +132,4 @@
 2. [pytorch中如何处理RNN输入变长序列padding - 知乎](https://zhuanlan.zhihu.com/p/34418001)
 3. [649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)
 4. [中文文本分类 pytorch实现 - 知乎](https://zhuanlan.zhihu.com/p/73176084)
+5. [649453932/Bert-Chinese-Text-Classification-Pytorch: 使用Bert，ERNIE，进行中文文本分类](https://github.com/649453932/Bert-Chinese-Text-Classification-Pytorch)：这个没怎么太参考，主要参考的还是transformers官方的教程

@@ -1,5 +1,8 @@
 #代码实现和超参设置参考了https://github.com/649453932/Chinese-Text-Classification-Pytorch/blob/master/models/TextCNN.py
-#理解模型可参考：https://zhuanlan.zhihu.com/p/40276005
+
+#理解模型可参考：
+#https://zhuanlan.zhihu.com/p/40276005
+#Convolutional Neural Networks for Sentence Classification | Let's Smile https://tw19941212.github.io/posts/f07060b1/
 
 import torch
 import torch.nn as nn
