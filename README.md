@@ -40,13 +40,14 @@
 
 # 表征方法
 通过`-e`参数传入方法名称
-- 通过word2vec模型得到词表征后，直接离线得到样本表征：天然与后面模型部分解耦（本项目直接将文本嵌入部分前置了。预加载词表征可通过`--pre_load`参数实现，`save`值为储存当前的嵌入结果，`load`值为直接使用本地的嵌入结果，`--embedding_path`参数是储存路径。此外还有一边建模一边嵌入的写法，以后再写）。需要分词
+- 通过word2vec模型得到词表征后，直接离线得到样本表征：目前暂时仅支持与下游任务解耦的表征方法（本项目直接将文本嵌入部分前置了。预加载词表征可通过`--pre_load`参数实现，`save`值为储存当前的嵌入结果，`load`值为直接使用本地的嵌入结果，`--embedding_path`参数是储存路径。此外还有一边建模一边嵌入的写法，以后再写）。需要分词
     - `w2v`：得到word2vec表征（pad后的矩阵和seq_len）
     - `w2v_mean`：使用word2vec向量在样本上的平均值，作为样本表征
     - 预训练词向量的路径通过`-ep`参数传入
     - 加载预训练词向量的方法通过`-et`参数传入：
         - `Chinese-Word-Vectors`：<https://github.com/Embedding/Chinese-Word-Vectors>项目下载解压后得到的TXT格式词向量文件
     - `--embedding_batch_size`：嵌入时的batch size，默认1024
+- `transformers`：提前使用预训练模型内置分词器进行分词。暂时仅支持huggingface.transformers.AutoTokenizer。`--transformers_tokenizer_folder`是对应文件夹/模型的名称
 
 `-ws`参数是分词方法，仅对需要分词的表征方法或模型有效：
 - `jieba`：使用jieba包默认设置分词
@@ -68,7 +69,7 @@
 - `TextRCNN`：TextRCNN（我直接参考了这个GitHub项目的代码，即直接使用通用RNN实现，而没有用论文中的循环神经网络，具体细节可以参考这个项目的博文：[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)）
 - `DPCNN`：DPCNN
 - FastText系
-    - `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化；或自己重新训练）（还没实现，我不会C++所以FastText官方代码复现对我来说难度太高了，然后我看了一下[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)的实现，主要是我没看懂它这个bi-gram和tri-gram怎么做的？以后再搞吧）
+    - `FastText`：手动实现FastText（unigram使用词向量直接嵌入，bigram和trigram的初始嵌入层随机初始化并随模型训练而更新；或自己重新训练）（还没实现，我不会C++所以FastText官方代码复现对我来说难度太高了，然后我看了一下[649453932/Chinese-Text-Classification-Pytorch: 中文文本分类，TextCNN，TextRNN，FastText，TextRCNN，BiLSTM_Attention，DPCNN，Transformer，基于pytorch，开箱即用。](https://github.com/649453932/Chinese-Text-Classification-Pytorch)的实现，主要是我没看懂它这个bi-gram和tri-gram怎么做的？以后再搞吧）
 - `Transformer_Mean`：transformer encoder + masked mean pooling (参数都是from scratch训练的)
 
 需要对文本进行分词：
@@ -77,7 +78,8 @@
 
 预训练模型（需要使用内置分词器实现分词，而且不需要提前嵌入（理论上也可以实现提前嵌入，但是感觉应该没必要））：  
 （使用transformers包实现调用）
-- `Bert`
+超参`--transformers_model_folder`是对应文件夹/模型的名称
+- `Bert`（直接使用`[CLS]` token表征作为样本表征，然后通过单层MLP（dropout+单层线性网络），与[BertForSequenceClassification](https://github.com/huggingface/transformers/blob/ee0d001de71f0da892f86caa3cf2387020ec9696/src/transformers/models/bert/modeling_bert.py#L1510:7)的实现相同）
 
 各项超参（有些有的模型不能用）：
 - `--optimizer`：默认`Adam`

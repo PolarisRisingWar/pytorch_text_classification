@@ -15,6 +15,7 @@ parser.add_argument("--embedding_folder",help="本地嵌入矩阵的存储路径
 parser.add_argument("-ep","--embedding_model_path",help='文本嵌入预训练模型路径')
 parser.add_argument("-et","--embedding_model_type",help='将文本嵌入预训练模型加载到本地的方法')
 parser.add_argument("--embedding_batch_size",default=1024,type=int,help="嵌入时的batch size")
+parser.add_argument("--transformers_tokenizer_folder",type=str,help="AutoTokenizer分词时调用的文件夹名（事实上用模型名也行）")
 
 parser.add_argument("-ws","--word_segmentation",default="jieba",help='分词方法')
 
@@ -23,6 +24,7 @@ parser.add_argument("--max_sentence_length",default=512,type=int,help='每一句
 parser.add_argument("-m","--model",default='mlp',help="文本分类模型名称")
 parser.add_argument("--fastText_temp_folder",help='FastText官方代码复现时存储临时文本文件的文件夹')
 parser.add_argument("--fastText_temp_mode",default="new")
+parser.add_argument("--transformers_model_folder",type=str,help="transformers建模时调用的文件夹名（事实上用模型名也行）")
 
 parser.add_argument("--reappear",action="store_true",help="是否配置可复现性环境")
 parser.add_argument("--torch_random_seed",default=3407,type=int,help="PyTorch使用的随机种子")
@@ -124,13 +126,16 @@ if arg_dict['reappear']:
 dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder'])  #train/valid/test为键
 
 #文本表征或其他文本预处理工作
-if arg_dict['pre_load']=='load' or not (arg_dict['model']=='FastText_official'):
-    for k in dataset_dict:
-        dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
-        feature_dim=dataset_dict[k]['embedding'].size()[-1]
-        print(k+'嵌入的维度为：'+str(dataset_dict[k]['embedding'].size()))
-        if arg_dict['embedding_method']=='w2v':
-            dataset_dict[k]['pad_list']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'),map_location='cpu')
+if arg_dict['pre_load']=='load' and not (arg_dict['model']=='FastText_official'):  #加载储存的词向量
+    if arg_dict['embedding_method']=='transformer':
+        feature_dim=768
+    else:
+        for k in dataset_dict:
+            dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
+            feature_dim=dataset_dict[k]['embedding'].size()[-1]
+            print(k+'嵌入的维度为：'+str(dataset_dict[k]['embedding'].size()))
+            if arg_dict['embedding_method']=='w2v':
+                dataset_dict[k]['pad_list']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'),map_location='cpu')
 else:
     if arg_dict['embedding_method'] in ['w2v','w2v_mean'] or (arg_dict['model']=='FastText_official'):  #需要分词的表示方法，返回分词函数
         if arg_dict['word_segmentation']=='jieba':
@@ -205,11 +210,28 @@ else:
         train_txt.close()
         test_txt.close()
         print('处理完毕！')
+    
+    if arg_dict['embedding_method']=='transformers':
+        feature_dim=768
+
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(arg_dict['transformers_tokenizer_folder'])
+
+        for k in dataset_dict:
+            pt_batch=tokenizer(dataset_dict[k]['text'],padding=True,truncation=True,max_length=arg_dict['max_sentence_length'],return_tensors='pt')
+            dataset_dict[k]['input_ids']=pt_batch['input_ids']
+            dataset_dict[k]['token_type_ids']=pt_batch['token_type_ids']
+            dataset_dict[k]['attention_mask']=pt_batch['attention_mask']
 
 
             
 
 if arg_dict['pre_load']=='save':
+    if arg_dict['embedding_method']=='transformers':
+        for k in dataset_dict:
+            torch.save(dataset_dict[k]['input_ids'],os.path.join(arg_dict['embedding_folder'],k+'_input_ids.pt'))
+            torch.save(dataset_dict[k]['token_type_ids'],os.path.join(arg_dict['embedding_folder'],k+'_token_type_ids.pt'))
+            torch.save(dataset_dict[k]['attention_mask'],os.path.join(arg_dict['embedding_folder'],k+'_attention_mask.pt'))
     for k in dataset_dict:
         torch.save(dataset_dict[k]['embedding'],os.path.join(arg_dict['embedding_folder'],k+'.pt'))
         print('已存储'+k+'嵌入到'+os.path.join(arg_dict['embedding_folder'],k+'.pt')+'位置！')
@@ -244,6 +266,8 @@ if arg_dict['model']=='DPCNN':
 if arg_dict['model']=='Transformer_Mean':
     from pycls.models import TransformerClassifier
     model=TransformerClassifier(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
+if arg_dict['model']=='Bert':
+    
 if arg_dict['model']=='FastText_official':
     import fasttext
     model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'),lr=arg_dict['lr'],epoch=arg_dict['epoch_num'])
