@@ -16,6 +16,7 @@ parser.add_argument("-ep","--embedding_model_path",help='文本嵌入预训练�
 parser.add_argument("-et","--embedding_model_type",help='将文本嵌入预训练模型加载到本地的方法')
 parser.add_argument("--embedding_batch_size",default=1024,type=int,help="嵌入时的batch size")
 parser.add_argument("--transformers_tokenizer_folder",type=str,help="AutoTokenizer分词时调用的文件夹名（事实上用模型名也行）")
+#TODO: 有一些不能直接用AutoTokenizer或AutoModel，这种情况我以后再解决
 
 parser.add_argument("-ws","--word_segmentation",default="jieba",help='分词方法')
 
@@ -127,8 +128,12 @@ dataset_dict=load_datasets(arg_dict['dataset_type'],arg_dict['dataset_folder']) 
 
 #文本表征或其他文本预处理工作
 if arg_dict['pre_load']=='load' and not (arg_dict['model']=='FastText_official'):  #加载储存的词向量
-    if arg_dict['embedding_method']=='transformer':
+    if arg_dict['embedding_method']=='transformers':
         feature_dim=768
+        for k in dataset_dict:
+            dataset_dict[k]['input_ids']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_input_ids.pt'))
+            dataset_dict[k]['token_type_ids']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_token_type_ids.pt'))
+            dataset_dict[k]['attention_mask']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'_attention_mask.pt'))
     else:
         for k in dataset_dict:
             dataset_dict[k]['embedding']=torch.load(os.path.join(arg_dict['embedding_folder'],k+'.pt'),map_location='cpu')
@@ -211,7 +216,7 @@ else:
         test_txt.close()
         print('处理完毕！')
     
-    if arg_dict['embedding_method']=='transformers':
+    if arg_dict['embedding_method']=='transformers':  #使用transformers包的分词器进行分词（提前分词是为了加速模型运行）
         feature_dim=768
 
         from transformers import AutoTokenizer
@@ -232,12 +237,13 @@ if arg_dict['pre_load']=='save':
             torch.save(dataset_dict[k]['input_ids'],os.path.join(arg_dict['embedding_folder'],k+'_input_ids.pt'))
             torch.save(dataset_dict[k]['token_type_ids'],os.path.join(arg_dict['embedding_folder'],k+'_token_type_ids.pt'))
             torch.save(dataset_dict[k]['attention_mask'],os.path.join(arg_dict['embedding_folder'],k+'_attention_mask.pt'))
-    for k in dataset_dict:
-        torch.save(dataset_dict[k]['embedding'],os.path.join(arg_dict['embedding_folder'],k+'.pt'))
-        print('已存储'+k+'嵌入到'+os.path.join(arg_dict['embedding_folder'],k+'.pt')+'位置！')
-        if 'pad_list' in dataset_dict[k]:
-            torch.save(dataset_dict[k]['pad_list'],os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'))
-            print('已存储'+k+'pad list到'+os.path.join(arg_dict['embedding_folder'],k+'_pad.pt')+'位置！')
+    else:
+        for k in dataset_dict:
+            torch.save(dataset_dict[k]['embedding'],os.path.join(arg_dict['embedding_folder'],k+'.pt'))
+            print('已存储'+k+'嵌入到'+os.path.join(arg_dict['embedding_folder'],k+'.pt')+'位置！')
+            if 'pad_list' in dataset_dict[k]:
+                torch.save(dataset_dict[k]['pad_list'],os.path.join(arg_dict['embedding_folder'],k+'_pad.pt'))
+                print('已存储'+k+'pad list到'+os.path.join(arg_dict['embedding_folder'],k+'_pad.pt')+'位置！')
 
 #TODO: 感觉上面的内容应该把所有在GPU上的程序先下下来，再继续后面的代码
 
@@ -266,8 +272,10 @@ if arg_dict['model']=='DPCNN':
 if arg_dict['model']=='Transformer_Mean':
     from pycls.models import TransformerClassifier
     model=TransformerClassifier(input_dim=feature_dim,output_dim=arg_dict['output_dim'],dropout_rate=arg_dict['dropout'])
-if arg_dict['model']=='Bert':
-    
+if arg_dict['model']=='AutoModel':
+    from pycls.models import TransformersAutoModel
+    model=TransformersAutoModel(transformers_model_folder=arg_dict['transformers_model_folder'],input_dim=feature_dim,output_dim=arg_dict['output_dim'],
+                                dropout_rate=arg_dict['dropout'])
 if arg_dict['model']=='FastText_official':
     import fasttext
     model=fasttext.train_supervised(os.path.join(arg_dict['fastText_temp_folder'],'train.txt'),lr=arg_dict['lr'],epoch=arg_dict['epoch_num'])
@@ -289,6 +297,8 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
 
     text_padlist_model=['gru','GRU_op','GRU_att','Transformer_Mean']  #模型输入是pad好的词向量和pad list
 
+    tokenized_model=['AutoModel']  #模型输入是分词好的词索引等
+
     model.to(arg_dict['cuda_device'])
 
     #建立优化器
@@ -305,6 +315,10 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
     elif arg_dict['model'] in text_padlist_model:
         train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['embedding'],dataset_dict['train']['pad_list'],
                                     torch.tensor(dataset_dict['train']['label'])),batch_size=arg_dict['train_batch_size'],shuffle=True)
+    elif arg_dict['model'] in tokenized_model:
+        train_dataloader=DataLoader(TensorDataset(dataset_dict['train']['input_ids'],dataset_dict['train']['token_type_ids'],
+                                                    dataset_dict['train']['attention_mask'],torch.tensor(dataset_dict['train']['label'])),
+                                    batch_size=arg_dict['train_batch_size'],shuffle=True)
 
     #验证集
     dev_label=dataset_dict['valid']['label']
@@ -313,6 +327,9 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
     elif arg_dict['model'] in text_padlist_model:
         dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['embedding'],dataset_dict['valid']['pad_list']),
                                 batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    elif arg_dict['model'] in tokenized_model:
+        dev_dataloader=DataLoader(TensorDataset(dataset_dict['valid']['input_ids'],dataset_dict['valid']['token_type_ids'],
+                                                dataset_dict['valid']['attention_mask']),batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
     if arg_dict['running_mode']=='es':  #应用早停机制
         assert len(arg_dict['valid_metric'])>0  #就是说起码需要有验证指标才行
@@ -352,6 +369,10 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
                 elif arg_dict['model'] in text_padlist_model:
                     outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
                     train_loss=loss_func(outputs,batch[2].to(arg_dict['cuda_device']))
+                elif arg_dict['model'] in tokenized_model:
+                    outputs=model(input_ids=batch[0].to(arg_dict['cuda_device']),token_type_ids=batch[1].to(arg_dict['cuda_device']),
+                                    attention_mask=batch[2].to(arg_dict['cuda_device']))
+                    train_loss=loss_func(outputs,batch[3].to(arg_dict['cuda_device']))
 
                 
                 if 'loss' in arg_dict['train_metric']:
@@ -373,12 +394,15 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
                         outputs=model(batch.to(arg_dict['cuda_device']))
                     elif arg_dict['model'] in text_padlist_model:
                         outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+                    elif arg_dict['model'] in tokenized_model:
+                        outputs=model(input_ids=batch[0].to(arg_dict['cuda_device']),token_type_ids=batch[1].to(arg_dict['cuda_device']),
+                                        attention_mask=batch[2].to(arg_dict['cuda_device']))
 
                     dev_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
             
             #记录指标
             this_epoch_metric=[metric_map[x](dev_label,dev_predicts) for x in valid_metrics]
-            #print(this_epoch_metric)  #这个是拿来我每次测试代码时候用的
+            print(this_epoch_metric)  #这个是拿来我每次测试代码时候用的
             valid_metrics_values.append(copy(this_epoch_metric))
             if arg_dict['wandb']:
                 log_dict={valid_metrics[i]:this_epoch_metric[i] for i in range(len(valid_metrics))}
@@ -410,6 +434,9 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
     elif arg_dict['model'] in text_padlist_model:
         test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['embedding'],dataset_dict['test']['pad_list']),
                                 batch_size=arg_dict['inference_batch_size'],shuffle=False)
+    elif arg_dict['model'] in tokenized_model:
+        test_dataloader=DataLoader(TensorDataset(dataset_dict['test']['input_ids'],dataset_dict['test']['token_type_ids'],
+                                                dataset_dict['test']['attention_mask']),batch_size=arg_dict['inference_batch_size'],shuffle=False)
 
     with torch.no_grad():
         for batch in test_dataloader:
@@ -419,6 +446,10 @@ if not arg_dict['model']=='FastText_official':  #需要正常运行的模型
                 outputs=model(batch.to(arg_dict['cuda_device']))
             elif arg_dict['model'] in text_padlist_model:
                 outputs=model(batch[0].to(arg_dict['cuda_device']),batch[1].to(arg_dict['cuda_device']))
+            elif arg_dict['model'] in tokenized_model:
+                outputs=model(input_ids=batch[0].to(arg_dict['cuda_device']),token_type_ids=batch[1].to(arg_dict['cuda_device']),
+                            attention_mask=batch[2].to(arg_dict['cuda_device']))
+
 
             test_predicts.extend([i.item() for i in torch.argmax(outputs,1)])
 

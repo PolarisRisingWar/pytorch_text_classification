@@ -6,3 +6,4 @@ from pycls.models.textcnn import TextCNN
 from pycls.models.textrcnn import TextRCNN
 from pycls.models.dpcnn import DPCNN
 from pycls.models.transformer_encoder import TransformerClassifier
+from pycls.models.transformers_automodel import TransformersAutoModel
