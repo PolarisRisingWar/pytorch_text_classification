@@ -11,7 +11,7 @@ class GRU_Output(nn.Module):
                         batch_first=True)
         self.lin=nn.Linear(in_features=hidden_dim*2 if bidirectional else hidden_dim,out_features=output_dim)
 
-    def forward(self,x:torch.Tensor,pad_list:torch.Tensor):  #x是一个padding后的Tensor，seq_len是对应的长度
+    def forward(self,x:torch.Tensor,pad_list:torch.Tensor):  #x是一个padding后的Tensor，pad_list是对应的mask
         lengths_list=[max(x,1) for x in pad_list.count_nonzero(1).tolist()]  #x等于0是空字符串情况，小于0是bug
         packed_input=nn.utils.rnn.pack_padded_sequence(x,lengths=lengths_list,batch_first=True,enforce_sorted=False)
         op,hn=self.rnns(packed_input)
